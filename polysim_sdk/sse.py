@@ -170,7 +170,7 @@ def spot_stream(
     backoff = reconnect_min_interval
     attempts = 0
     url = resolve_url(client.base_url, "/prices/stream")
-    headers = _sse_headers(client._api_key, "polysim-sdk/0.2.1")
+    headers = _sse_headers(client._api_key, "polysim-sdk/0.2.2")
     with httpx.Client(timeout=_stream_timeout()) as http:
         while True:
             try:
@@ -228,7 +228,7 @@ async def aspot_stream(
     backoff = reconnect_min_interval
     attempts = 0
     url = resolve_url(client.base_url, "/prices/stream")
-    headers = _sse_headers(client._api_key, "polysim-sdk/0.2.1")
+    headers = _sse_headers(client._api_key, "polysim-sdk/0.2.2")
     async with httpx.AsyncClient(timeout=_stream_timeout()) as http:
         while True:
             try:

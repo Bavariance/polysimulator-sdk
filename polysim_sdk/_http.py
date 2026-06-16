@@ -196,7 +196,7 @@ class SyncTransport:
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
         floor_interval: float = DEFAULT_FLOOR_INTERVAL_SECONDS,
-        user_agent: str = "polysim-sdk/0.2.1",
+        user_agent: str = "polysim-sdk/0.2.2",
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self._max_retries = max_retries
@@ -307,7 +307,7 @@ class AsyncTransport:
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
         floor_interval: float = DEFAULT_FLOOR_INTERVAL_SECONDS,
-        user_agent: str = "polysim-sdk/0.2.1",
+        user_agent: str = "polysim-sdk/0.2.2",
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self._max_retries = max_retries

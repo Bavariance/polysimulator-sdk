@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "polysimulator"
-version = "0.2.1"
+version = "0.2.2"
 description = "Python SDK for the PolySimulator paper-trading API, with py-clob-client drop-in parity"
 readme = "README.md"
 requires-python = ">=3.10"
