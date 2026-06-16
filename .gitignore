@@ -1,0 +1,18 @@
+# Python build / packaging artifacts
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.py[cod]
+
+# Virtualenv
+.venv/
+venv/
+
+# Tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Local throwaway smoke scripts (never committed — may contain wiring to live keys)
+_smoke_*.py

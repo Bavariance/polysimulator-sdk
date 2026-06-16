@@ -1,0 +1,71 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "polysimulator"
+version = "0.2.1"
+description = "Python SDK for the PolySimulator paper-trading API, with py-clob-client drop-in parity"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Bavariance" }]
+keywords = ["polymarket", "polysimulator", "trading", "paper-trading", "api-sdk"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial",
+]
+dependencies = [
+    "httpx>=0.27,<1",
+    "websockets>=12,<17",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "build>=1.0",
+    "twine>=5.0",
+]
+
+[project.urls]
+Homepage = "https://polysimulator.com"
+Documentation = "https://docs.polysimulator.com"
+"API Reference" = "https://api.polysimulator.com/docs"
+Repository = "https://github.com/Bavariance/polysimulator-sdk"
+
+[tool.hatch.build.targets.wheel]
+packages = ["polysim_sdk", "polysim_clob_client"]
+
+[tool.hatch.build.targets.sdist]
+# Ship only what a consumer needs: the two import packages plus license +
+# readme. Operator-only material (the prod-DB grant scripts under scripts/,
+# the live smoke probe, and the test suite) is deliberately excluded so the
+# published distribution stays lean and carries nothing infra-sensitive.
+include = [
+    "polysim_sdk",
+    "polysim_clob_client",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
