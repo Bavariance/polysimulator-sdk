@@ -24,7 +24,6 @@ all HTTP through it, inheriting pacing / retry / error mapping in one place.
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import time
@@ -57,6 +56,22 @@ from polysim_clob_client.exceptions import PolyApiException
 from polysim_sdk import PolySimClient
 from polysim_sdk._http import DEFAULT_BASE_URL
 
+# Pure read-path helpers live in polysim_sdk._shared so the py-sdk mirror
+# (polysim_polymarket) reuses the identical cursor / order-book / token-id
+# logic. Re-imported here (and re-exported as part of this module's surface —
+# e.g. tests import _decode_cursor / _encode_cursor / _next_cursor from here)
+# so existing references keep working. F401: these are deliberate re-exports.
+from polysim_sdk._shared import (  # noqa: F401
+    _best_ask,
+    _best_bid,
+    _book_sides,
+    _decode_cursor,
+    _encode_cursor,
+    _next_cursor,
+    _to_levels,
+)
+from polysim_sdk._shared import _split_token as _split_token_shared
+
 _PAGE_LIMIT = 100
 _DEFAULT_TICK_SIZE = 0.01
 # A real Polymarket CLOB outcome-token id is a uint256 rendered as a long
@@ -66,75 +81,9 @@ _DEFAULT_TICK_SIZE = 0.01
 _TOKEN_ID_MIN_DIGITS = 30
 
 
-# ── cursor <-> offset translation ──────────────────────────────────────────
-# py-clob-client paginates with base64 cursors ("MA=="=0, "LTE="=-1=done).
-# PolySim REST is limit/offset, so we translate at the boundary.
-
-
-def _decode_cursor(cursor: str | None) -> int:
-    """base64 cursor -> integer offset. START/empty -> 0, END -> -1."""
-    if not cursor or cursor == START_CURSOR:
-        return 0
-    if cursor == END_CURSOR:
-        return -1
-    try:
-        return int(base64.b64decode(cursor).decode())
-    except (ValueError, TypeError):
-        return 0
-
-
-def _encode_cursor(offset: int) -> str:
-    """integer offset -> base64 cursor."""
-    return base64.b64encode(str(offset).encode()).decode()
-
-
-def _next_cursor(offset: int, page_len: int, limit: int) -> str:
-    """Synthesise the next cursor: END when the page was short."""
-    return _encode_cursor(offset + limit) if page_len >= limit else END_CURSOR
-
-
-# ── order-book parsing helpers ─────────────────────────────────────────────
-
-
-def _to_levels(raw: Any) -> list[tuple[float, float]]:
-    """Normalise a side of the book to ``[(price, size), ...]`` floats.
-
-    Tolerates dict levels (``{"price","size"|"quantity"}``) and pair levels
-    (``[price, size]``); skips anything unparseable.
-    """
-    out: list[tuple[float, float]] = []
-    for lvl in raw or []:
-        price: Any
-        size: Any
-        if isinstance(lvl, dict):
-            price = lvl.get("price")
-            size = lvl.get("size", lvl.get("quantity"))
-        elif isinstance(lvl, (list, tuple)) and len(lvl) >= 2:
-            price, size = lvl[0], lvl[1]
-        else:
-            continue
-        try:
-            out.append((float(price), float(size)))
-        except (TypeError, ValueError):
-            continue
-    return out
-
-
-def _book_sides(
-    book: dict[str, Any],
-) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
-    """Extract (bids, asks) level lists from a PolySim book payload."""
-    bids = _to_levels(book.get("bids"))
-    asks = _to_levels(book.get("asks"))
-    return bids, asks
-
-
-def _best_bid(bids: list[tuple[float, float]]) -> float | None:
-    return max((p for p, _ in bids), default=None)
-
-
-def _best_ask(asks: list[tuple[float, float]]) -> float | None:
-    return min((p for p, _ in asks), default=None)
+# Cursor translation, order-book level parsing, and best-bid/ask helpers now
+# live in polysim_sdk._shared (imported above) so both CLOB mirrors share one
+# implementation.
 
 
 class ClobClient:
@@ -198,18 +147,11 @@ class ClobClient:
     def _split_token(token_id: str) -> tuple[str, str]:
         """Map a py-clob ``token_id`` onto PolySim ``(market_id, outcome)``.
 
-        py-clob-client addresses a single outcome token; PolySim addresses a
-        market plus an outcome (YES/NO). The parity seam: a bare ``token_id``
-        is treated as the market id with outcome ``YES``; append ``":NO"`` /
-        ``":YES"`` to target the other outcome explicitly.
+        Thin wrapper over :func:`polysim_sdk._shared._split_token` (the shared
+        parity seam): a bare ``token_id`` is the market id with outcome
+        ``YES``; ``":NO"`` / ``":YES"`` targets the other outcome explicitly.
         """
-        tid = str(token_id)
-        if ":" in tid:
-            market_id, _, outcome = tid.rpartition(":")
-            outcome = outcome.upper()
-            if outcome in ("YES", "NO") and market_id:
-                return market_id, outcome
-        return tid, "YES"
+        return _split_token_shared(token_id)
 
     def _resolve_token(self, token_id: str) -> tuple[str, str]:
         """Resolve a py-clob ``token_id`` to PolySim ``(market_id, outcome)``.

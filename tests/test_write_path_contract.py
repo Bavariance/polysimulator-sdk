@@ -93,3 +93,77 @@ def test_clob_cancel_all_sends_confirmation(respx_mock):
         assert _confirms_cancel_all(route.calls.last.request)
     finally:
         c.close()
+
+
+# ── SecureClient (py-sdk mirror) write-path contracts ───────────────────────
+# The G3 trading surface must put the same backend-validated bytes on the wire as
+# the v1 mirror: cancel_all's confirmation guard, and the worst-acceptable-price
+# cap a market order MUST carry (an uncapped market order is the footgun the
+# backend's marketable-limit model rejects — the v1 mirror defaults 0.99 BUY /
+# 0.01 SELL). A mock-only green suite can't bless a request the backend rejects.
+
+
+def test_secure_cancel_all_sends_confirmation(respx_mock):
+    from polysim_polymarket import SecureClient
+
+    c = SecureClient(host=BASE_URL, api_key="ps_live_testkey")
+    c._client._transport._floor_interval = 0.0
+    try:
+        route = respx_mock.post(f"{BASE_URL}/v1/cancel-all").mock(
+            return_value=httpx.Response(200, json={"canceled": []})
+        )
+        c.cancel_all()
+        assert route.called
+        assert _confirms_cancel_all(route.calls.last.request)
+    finally:
+        c.close()
+
+
+def test_secure_market_buy_sends_worst_price_cap(respx_mock):
+    """A market BUY with no ``max_price`` MUST still forward a worst-price cap.
+
+    The backend's marketable-limit model requires a price on every market order;
+    an uncapped BUY is rejected. The mirror defaults the cap to 0.99 (the v1
+    mirror's BUY default) — pin that it lands in the body, never absent.
+    """
+    import json
+
+    from polysim_polymarket import SecureClient
+
+    c = SecureClient(host=BASE_URL, api_key="ps_live_testkey")
+    c._client._transport._floor_interval = 0.0
+    try:
+        route = respx_mock.post(f"{BASE_URL}/v1/orders").mock(
+            return_value=httpx.Response(200, json={"order_id": "o1", "status": "FILLED"})
+        )
+        # colon-form token resolves locally — no reverse-resolution network call.
+        c.place_market_order(token_id="0xcond:YES", side="BUY", amount="20")
+        assert route.called
+        body = json.loads(route.calls.last.request.content)
+        assert "price" in body, "market order MUST carry a worst-acceptable price cap"
+        assert body["price"] == 0.99
+        assert body["order_type"] == "market"
+        assert body["amount"] == 20.0
+    finally:
+        c.close()
+
+
+def test_secure_market_sell_sends_worst_price_floor(respx_mock):
+    """A market SELL with no ``min_price`` MUST still forward a worst-price floor (0.01)."""
+    import json
+
+    from polysim_polymarket import SecureClient
+
+    c = SecureClient(host=BASE_URL, api_key="ps_live_testkey")
+    c._client._transport._floor_interval = 0.0
+    try:
+        route = respx_mock.post(f"{BASE_URL}/v1/orders").mock(
+            return_value=httpx.Response(200, json={"order_id": "o2", "status": "FILLED"})
+        )
+        c.place_market_order(token_id="0xcond:YES", side="SELL", shares="15")
+        assert route.called
+        body = json.loads(route.calls.last.request.content)
+        assert body["price"] == 0.01
+        assert body["quantity"] == 15.0
+    finally:
+        c.close()
