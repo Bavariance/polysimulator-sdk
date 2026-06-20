@@ -31,14 +31,23 @@ END_CURSOR = "LTE="
 
 
 def _decode_cursor(cursor: str | None) -> int:
-    """base64 cursor -> integer offset. START/empty -> 0, END -> -1."""
+    """base64 cursor -> integer offset. START/empty -> 0, END -> -1.
+
+    ANY decode failure (bad base64, non-ASCII / non-numeric payload, a wrong
+    input type) falls back to ``0`` rather than propagating an unexpected error
+    type — a malformed cursor must never crash a paginator. The catch is broad
+    (``Exception``) on purpose: ``base64.b64decode`` / ``bytes.decode`` /
+    ``int()`` can raise ``binascii.Error`` / ``UnicodeDecodeError`` / ``ValueError``
+    / ``TypeError`` (and a future codec could surface another), all of which mean
+    the same thing here — "unparseable cursor, start from 0".
+    """
     if not cursor or cursor == START_CURSOR:
         return 0
     if cursor == END_CURSOR:
         return -1
     try:
         return int(base64.b64decode(cursor).decode())
-    except (ValueError, TypeError):
+    except Exception:
         return 0
 
 

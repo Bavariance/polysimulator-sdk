@@ -26,6 +26,7 @@ Example:
     print(fill["fee"], fill["slippage_bps"])
 """
 
+from polysim_sdk._version import __version__
 from polysim_sdk.aio import AsyncPolySimClient
 from polysim_sdk.client import PolySimClient
 from polysim_sdk.constants import OrderType, Side
@@ -49,6 +50,5 @@ __all__ = [
     "RateLimitError",
     "ValidationError",
     "retry_on_market_warmup",
+    "__version__",
 ]
-
-__version__ = "0.2.2"

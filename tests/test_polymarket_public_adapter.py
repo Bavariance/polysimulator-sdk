@@ -992,3 +992,55 @@ def test_list_markets_forwards_closed_filter(public_client, respx_mock):
     # The closed filter forwards to the native list_markets query (httpx
     # serialises the bool to a lowercase ``true`` on the wire).
     assert dict(route.calls.last.request.url.params).get("closed") == "true"
+
+
+def test_list_markets_page_size_threads_to_request_limit(public_client, respx_mock):
+    """``page_size`` must drive the fetch ``limit`` (it was a NO-OP hardcoding 100)."""
+    route = respx_mock.get(f"{BASE_URL}/v1/markets").mock(
+        return_value=httpx.Response(200, json={"markets": []})
+    )
+    public_client.list_markets(page_size=5).first_page()
+    assert dict(route.calls.last.request.url.params).get("limit") == "5"
+
+
+def test_list_markets_page_size_sets_page_boundary(public_client, respx_mock):
+    """A full ``page_size`` page → has_more=True; a short page → has_more=False.
+
+    With page_size=2 and a 2-row response, the page must be marked has_more
+    (boundary computed against page_size, not the hardcoded 100 that always made
+    a 2-row page look short / final).
+    """
+    respx_mock.get(f"{BASE_URL}/v1/markets").mock(
+        return_value=httpx.Response(
+            200,
+            json={"markets": [{"id": "m1", "condition_id": "0xc1"},
+                              {"id": "m2", "condition_id": "0xc2"}]},
+        )
+    )
+    page = public_client.list_markets(page_size=2).first_page()
+    assert len(page.items) == 2
+    assert page.has_more is True
+    assert page.next_cursor is not None
+
+
+def test_list_markets_page_size_short_page_is_final(public_client, respx_mock):
+    respx_mock.get(f"{BASE_URL}/v1/markets").mock(
+        return_value=httpx.Response(
+            200, json={"markets": [{"id": "m1", "condition_id": "0xc1"}]}
+        )
+    )
+    page = public_client.list_markets(page_size=5).first_page()
+    assert len(page.items) == 1
+    assert page.has_more is False
+
+
+def test_list_markets_invalid_page_size_raises(public_client):
+    """A non-positive ``page_size`` — and a ``bool`` / non-``int`` — raises
+    UserInputError (py-sdk's guard; ``resolve_page_size`` rejects all three)."""
+    from polysim_polymarket.errors import UserInputError
+
+    # 0/-1 → non-positive; True/False → bool is an int subclass but rejected;
+    # "5" → non-int type rejected.
+    for bad in (0, -1, True, False, "5"):
+        with pytest.raises(UserInputError):
+            public_client.list_markets(page_size=bad).first_page()

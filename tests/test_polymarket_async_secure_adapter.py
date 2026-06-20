@@ -106,8 +106,8 @@ async def test_create_limit_order_returns_inert_signed_order(secure, respx_mock)
     assert body["market_id"] == "0xcond"
     assert body["outcome"] == "YES"
     assert body["order_type"] == "limit"
-    assert body["price"] == 0.55
-    assert body["quantity"] == 10.0
+    assert body["price"] == "0.55"
+    assert body["quantity"] == "10"
 
 
 async def test_create_limit_order_reverse_resolves_long_token(secure, respx_mock):
@@ -130,18 +130,18 @@ async def test_create_market_buy_defaults_worst_price_099(secure, respx_mock):
     body = order.paper_body
     assert body["order_type"] == "market"
     assert body["time_in_force"] == "FAK"
-    assert body["amount"] == 20.0
+    assert body["amount"] == "20"
     assert "quantity" not in body
     # worst-acceptable price defaults to 0.99 for a BUY (never uncapped)
-    assert body["price"] == 0.99
+    assert body["price"] == "0.99"
 
 
 async def test_create_market_sell_defaults_worst_price_001(secure, respx_mock):
     order = await secure.create_market_order(token_id=COLON_TOKEN, side="SELL", shares="15")
     body = order.paper_body
-    assert body["quantity"] == 15.0
+    assert body["quantity"] == "15"
     assert "amount" not in body
-    assert body["price"] == 0.01
+    assert body["price"] == "0.01"
 
 
 # ── post_order / place_*: await-submit the right body ───────────────────────
@@ -163,8 +163,8 @@ async def test_post_order_sends_body_to_v1_orders(secure, respx_mock):
     sent = _body(route.calls.last.request)
     assert sent["market_id"] == "0xcond"
     assert sent["side"] == "BUY"
-    assert sent["price"] == 0.55
-    assert sent["quantity"] == 10.0
+    assert sent["price"] == "0.55"
+    assert sent["quantity"] == "10"
     assert isinstance(resp, AcceptedOrder)
     assert resp.order_id == "o1"
     assert resp.status == "matched"
@@ -177,8 +177,8 @@ async def test_place_market_order_builds_and_posts_with_cap(secure, respx_mock):
     )
     resp = await secure.place_market_order(token_id=COLON_TOKEN, side="BUY", amount="25")
     sent = _body(route.calls.last.request)
-    assert sent["amount"] == 25.0
-    assert sent["price"] == 0.99  # worst-price cap forwarded
+    assert sent["amount"] == "25"
+    assert sent["price"] == "0.99"  # worst-price cap forwarded
     assert resp.order_id == "p2"
 
 
@@ -200,7 +200,7 @@ async def test_post_orders_batch(secure, respx_mock):
     assert route.called
     sent = _body(route.calls.last.request)
     assert len(sent["orders"]) == 2
-    assert sent["orders"][0]["price"] == 0.5
+    assert sent["orders"][0]["price"] == "0.5"
     assert sent["orders"][1]["side"] == "SELL"
     assert tuple(r.order_id for r in resps) == ("a", "b")
     assert resps[0].status == "live"

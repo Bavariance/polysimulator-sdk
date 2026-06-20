@@ -41,6 +41,30 @@ def test_limit_order_empty_token_id_raises(secure, respx_mock):
         secure.create_limit_order(token_id="", price="0.5", size="10", side="BUY")
 
 
+def test_resolve_coordinates_validates_token_before_network(secure):
+    """An empty / non-string token_id is rejected BEFORE any reverse-resolution
+    network call — no ``/v1/markets-by-token`` route is registered, so reaching
+    the raise proves zero requests fired."""
+    from polysim_polymarket import UserInputError
+
+    with pytest.raises(UserInputError):
+        secure._resolve_coordinates("")
+    with pytest.raises(UserInputError):
+        secure._resolve_coordinates(None)  # type: ignore[arg-type]
+
+
+def test_create_order_bad_token_does_not_hit_network(secure, respx_mock):
+    """A bad token must raise before the markets-by-token network call. The route
+    is registered but assert_all_called is relaxed by checking it stayed
+    uncalled."""
+    from polysim_polymarket import UserInputError
+
+    route = respx_mock.get(url__startswith=f"{BASE_URL}/v1/markets-by-token")
+    with pytest.raises(UserInputError):
+        secure.create_market_order(token_id="", side="BUY", amount="10")
+    assert not route.called
+
+
 def test_limit_order_nonpositive_price_raises(secure, respx_mock):
     from polysim_polymarket import UserInputError
 

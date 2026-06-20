@@ -664,7 +664,8 @@ class ClobClient:
         order_type: OrderType | str | None,
         post_only: bool = False,
     ) -> dict[str, Any]:
-        tif = order.get("time_in_force", "GTC")
+        embedded_tif = str(order.get("time_in_force", "GTC"))
+        tif = embedded_tif
         if order_type is not None:
             tif = order_type.value if hasattr(order_type, "value") else str(order_type)
         # An embedded expiration means GTD was intended (e.g. a `create_order`
@@ -674,6 +675,17 @@ class ClobClient:
         # Never downgrade an expiring order to GTC.
         if order.get("expiration") and tif.upper() == "GTC":
             tif = "GTD"
+        # A MARKET order is a marketable-limit FOK/FAK; `create_market_order`
+        # embeds that tif. `post_order` defaults `orderType` to GTC, which would
+        # otherwise ship the contradictory `order_type=market, time_in_force=GTC`
+        # shape. When the caller left `orderType` at the GTC default, preserve the
+        # embedded FOK/FAK; an EXPLICIT FOK/FAK/GTD (anything but GTC) still wins.
+        if (
+            order.get("order_type") == "market"
+            and tif.upper() == "GTC"
+            and embedded_tif.upper() in ("FOK", "FAK")
+        ):
+            tif = embedded_tif
         return self._client.place_order(
             market_id=order["market_id"],
             side=order["side"],
@@ -713,7 +725,24 @@ class ClobClient:
         bodies: list[dict[str, Any]] = []
         for a in args:
             order = dict(a.order)
+            embedded_tif = str(order.get("time_in_force", "GTC"))
             tif = a.orderType.value if hasattr(a.orderType, "value") else str(a.orderType)
+            # Mirror _submit's GTD guard: an embedded expiration means GTD was
+            # intended (a `create_order(expiration=...)` order). `PostOrdersArgs`
+            # defaults `orderType` to GTC, which would otherwise downgrade the
+            # order to a contradictory GTC+expiration shape. Never downgrade an
+            # expiring order to GTC (an explicit non-GTC orderType still wins —
+            # exactly as `_submit` orders the two guards).
+            if order.get("expiration") and tif.upper() == "GTC":
+                tif = "GTD"
+            # Mirror _submit: a market order's embedded FOK/FAK must survive the
+            # GTC default of PostOrdersArgs.orderType (an explicit non-GTC wins).
+            if (
+                order.get("order_type") == "market"
+                and tif.upper() == "GTC"
+                and embedded_tif.upper() in ("FOK", "FAK")
+            ):
+                tif = embedded_tif
             order["time_in_force"] = tif
             if getattr(a, "postOnly", False):
                 order["post_only"] = True
@@ -751,12 +780,21 @@ class ClobClient:
         return self._client.cancel_all()
 
     def cancel_market_orders(self, market: str = "", asset_id: str = "") -> dict[str, Any]:
-        """adapt — cancel all orders in a market (``DELETE /v1/cancel-market-orders``)."""
+        """adapt — cancel all orders in a market (``DELETE /v1/cancel-market-orders``).
+
+        When only ``asset_id`` is given it is resolved to its market id via
+        :meth:`_resolve_token` (NOT the local-only ``_split_token``): a real
+        Polymarket CLOB outcome-token id (a long all-digit string) is
+        reverse-resolved through ``GET /v1/markets-by-token`` so the cancel scopes
+        the right condition id — a local split would treat the whole digit string
+        as the market and cancel the wrong (or no) market. The colon form and
+        short/non-numeric ids still resolve locally with no network call.
+        """
         market_id = market or asset_id
         if not market_id:
             raise PolyApiException(400, "cancel_market_orders requires market or asset_id.")
         if asset_id and not market:
-            market_id, _ = self._split_token(asset_id)
+            market_id, _ = self._resolve_token(asset_id)
         return self._client.cancel_market_orders(market_id)
 
     # ── order / trade reads ────────────────────────────────────────────────

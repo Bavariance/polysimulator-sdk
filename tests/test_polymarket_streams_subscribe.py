@@ -287,8 +287,14 @@ async def test_drop_oldest_backpressure_on_slow_consumer(monkeypatch) -> None:
 
     client = _aclient_public()
     h = await client.subscribe(MarketSpec(token_ids=[f"{_CID}:YES"]), queue_size=2)
-    # let the pump run to completion (drains all 50 frames into a size-2 queue)
-    await asyncio.sleep(0.05)
+    # DETERMINISTIC drain: yield to the pump task repeatedly until it has dropped
+    # at least one frame, rather than racing a fixed sleep. 50 frames into a
+    # size-2 queue with no consumer MUST drop; bound the loop so a real failure
+    # surfaces as an assertion, not a hang.
+    for _ in range(10_000):
+        if h.dropped > 0:
+            break
+        await asyncio.sleep(0)  # one event-loop turn → let the pump advance
     assert h.dropped > 0
     await h.close()
     await client.close()

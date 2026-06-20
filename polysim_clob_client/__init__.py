@@ -30,9 +30,11 @@ from polysim_clob_client.constants import (
     ZERO_ADDRESS,
 )
 from polysim_clob_client.exceptions import PolyApiException, PolyException
+from polysim_sdk import __version__
 
 __all__ = [
     "ClobClient",
+    "__version__",
     "ApiCreds",
     "AssetType",
     "BalanceAllowanceParams",

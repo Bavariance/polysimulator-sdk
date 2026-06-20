@@ -24,12 +24,28 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Generator
 from dataclasses import dataclass, field
 from decimal import Decimal
-from enum import StrEnum
+from enum import Enum
 from types import TracebackType
 from typing import Any, Literal, Protocol, TypeAlias, runtime_checkable
 
 from polysim_polymarket.clients._onchain import RFQ_NOT_SIMULATED
 from polysim_polymarket.errors import PolyException
+
+
+class StrEnum(str, Enum):
+    """3.10-safe stand-in for ``enum.StrEnum`` (3.11+).
+
+    ``enum.StrEnum`` only exists from 3.11; the package floor is 3.10, so we
+    mirror its observable behaviour with the classic ``(str, Enum)`` mixin —
+    members compare/hash equal to their string value and ``str(member)`` is the
+    value. The one cosmetic difference (``StrEnum``'s ``__str__`` returns the
+    value directly) is replicated below so a ported bot's ``str(RfqSide.YES)``
+    yields ``"YES"`` on both Python versions.
+    """
+
+    def __str__(self) -> str:
+        return str(self.value)
+
 
 # Id aliases — bare ``str`` NewType-equivalents (py-sdk uses ``TypeAlias = str``).
 RfqId: TypeAlias = str

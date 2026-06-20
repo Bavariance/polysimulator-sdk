@@ -571,3 +571,20 @@ def list_markets_forward(
     if ascending is not None:
         forward["ascending"] = ascending
     return forward
+
+
+def resolve_page_size(page_size: int) -> int:
+    """Validate + clamp a ``list_markets`` page size to the effective request limit.
+
+    Mirrors py-sdk's ``paginate_offset`` guard — a ``page_size < 1`` raises
+    ``UserInputError("page_size must be a positive integer.")`` (a non-int /
+    bool is also rejected). PolySimulator's ``/v1/markets`` hard-caps a page at
+    :data:`PAGE_LIMIT` (100) rows, so a larger ``page_size`` is clamped down to
+    that ceiling — the returned value is the effective ``limit`` the fetch +
+    cursor boundary use, so ``page_size`` is honoured rather than ignored.
+    """
+    if not isinstance(page_size, int) or isinstance(page_size, bool):
+        raise UserInputError("page_size must be a positive integer.")
+    if page_size < 1:
+        raise UserInputError("page_size must be a positive integer.")
+    return min(page_size, PAGE_LIMIT)

@@ -138,6 +138,27 @@ _ACCEPTED_STATUS_MAP: dict[str, str] = {
     "queued": "delayed",
 }
 
+# Coarse backend rejection statuses with no finer py-sdk error code. ``/v1/orders``
+# (and the per-row ``/v1/orders/batch`` entries) can return HTTP 200 with a row
+# whose status is ``REJECTED`` / ``ERROR`` / ``FAILED`` / ``CANCELLED``. These map
+# to a RejectedOrder with the "unknown" catch-all code (the more specific statuses
+# in ``_STATUS_TO_ERROR_CODE`` keep their codes). Kept for naming clarity even
+# though acceptance is now decided by the allowlist below, not this denylist —
+# any status outside the accepted set is rejected regardless.
+_REJECTED_STATUSES: frozenset[str] = frozenset(
+    {"rejected", "error", "failed", "cancelled", "canceled"}
+)
+
+# Acceptance ALLOWLIST — mirrors py-sdk's ``order_response._is_accepted``. The real
+# py-sdk accepts a row ONLY when ``status in {live, matched, delayed}`` AND
+# ``success`` is truthy AND ``order_id != ''`` AND ``error_msg == ''``. We project
+# the paper backend's wider status vocabulary onto those three post-statuses via
+# ``_ACCEPTED_STATUS_MAP``, so the mirror's accepted set is exactly the keys of
+# that map. An UNKNOWN / unexpected status is therefore NOT accepted (it falls
+# through to RejectedOrder), matching py-sdk's strict allowlist rather than the
+# previous denylist (which mistook an unrecognised status for ``matched``).
+_ACCEPTED_STATUSES: frozenset[str] = frozenset(_ACCEPTED_STATUS_MAP)
+
 
 # ── numeric / side validation ────────────────────────────────────────────────
 # ``coerce_positive_decimal`` + ``validate_side`` are NOT re-implemented here:
@@ -149,7 +170,14 @@ _ACCEPTED_STATUS_MAP: dict[str, str] = {
 # not import ``_trade``.
 
 
-def _validate_token_id(token_id: object) -> str:
+def validate_token_id(token_id: object) -> str:
+    """Reject a non-string / empty ``token_id`` like py-sdk's token guard.
+
+    A non-``str`` raises ``"token_id must be a string, got <type>."`` and an
+    empty string raises ``"token_id is required"``. Public so the secure client
+    can validate a token UP FRONT — before any reverse-resolution network call —
+    rather than only inside ``build_*_order`` after resolution.
+    """
     if not isinstance(token_id, str):
         raise UserInputError(f"token_id must be a string, got {type(token_id).__name__}.")
     if not token_id:
@@ -210,7 +238,7 @@ def build_limit_order(
     Returns a ``SignedOrder`` carrying the trading-semantic fields + the unsigned
     paper body; signing fields stay empty placeholders.
     """
-    _validate_token_id(token_id)
+    validate_token_id(token_id)
     validated_price = coerce_positive_decimal("price", price)
     validated_size = coerce_positive_decimal("size", size)
     validate_side(side)
@@ -232,14 +260,18 @@ def build_limit_order(
 
     gtd_expiration = expiration if expiration is not None and expiration > 0 else 0
     order_type = "GTD" if gtd_expiration > 0 else "GTC"
+    # Serialize the monetary/size fields as decimal STRINGS, not floats: the
+    # backend's order body is a string-decimal contract, and a float would let
+    # binary-float drift (e.g. 0.1) ride onto the wire. ``str(Decimal(...))``
+    # carries the exact decimal the caller gave.
     body: dict[str, Any] = {
         "market_id": market_id,
         "outcome": outcome,
         "side": side,
-        "price": float(validated_price),
+        "price": str(validated_price),
         "order_type": "limit",
         "time_in_force": order_type,
-        "quantity": float(validated_size),
+        "quantity": str(validated_size),
     }
     if post_only:
         body["post_only"] = True
@@ -288,7 +320,7 @@ def build_market_order(
     when given, else the :data:`DEFAULT_BUY_WORST_PRICE` /
     :data:`DEFAULT_SELL_WORST_PRICE` default — so the FOK/FAK is never uncapped.
     """
-    _validate_token_id(token_id)
+    validate_token_id(token_id)
     validate_side(side)
     if order_type not in _VALID_MARKET_ORDER_TYPES:
         raise UserInputError(f"order_type must be 'FAK' or 'FOK', got {order_type!r}.")
@@ -319,9 +351,10 @@ def build_market_order(
             if max_price is not None
             else DEFAULT_BUY_WORST_PRICE
         )
-        # USD notional for a market BUY -> sent as ``amount`` (server derives shares).
-        body["amount"] = float(validated_amount)
-        body["price"] = float(cap)
+        # USD notional for a market BUY -> sent as ``amount`` (server derives
+        # shares). Serialized as a decimal string (string-decimal contract).
+        body["amount"] = str(validated_amount)
+        body["price"] = str(cap)
     else:  # SELL
         if shares is None:
             raise UserInputError("shares is required for SELL market orders.")
@@ -337,9 +370,9 @@ def build_market_order(
             if min_price is not None
             else DEFAULT_SELL_WORST_PRICE
         )
-        # Share count for a market SELL -> sent as ``quantity``.
-        body["quantity"] = float(validated_shares)
-        body["price"] = float(cap)
+        # Share count for a market SELL -> sent as ``quantity`` (decimal string).
+        body["quantity"] = str(validated_shares)
+        body["price"] = str(cap)
 
     return _make_signed_order(
         token_id=token_id,
@@ -414,11 +447,16 @@ def adapt_order_response(raw: Any) -> OrderResponse:
     """Adapt a PolySim ``POST /v1/orders`` reply onto py-sdk's ``OrderResponse``.
 
     A malformed reply (not a dict) raises ``UnexpectedResponseError``. Otherwise
-    we read the order id + status and decide accepted vs rejected: an explicit
-    ``success: false`` (or a recognised error status) yields a
-    :class:`RejectedOrder` with a mapped :data:`OrderResponseErrorCode`; anything
-    else is an :class:`AcceptedOrder`. Field names track py-sdk so a ported bot's
-    ``resp.ok`` / ``resp.order_id`` / ``resp.status`` read identically.
+    we decide accepted vs rejected with py-sdk's strict ALLOWLIST
+    (``order_response._is_accepted``): a row is an :class:`AcceptedOrder` ONLY when
+    its status is a recognised accepted post-status AND ``success`` is not
+    explicitly false AND it carries a non-empty ``order_id`` AND no error message —
+    exactly py-sdk's ``status in {live, matched, delayed} AND success AND
+    order_id != '' AND error_msg == ''``. ANYTHING else (including an UNKNOWN /
+    unexpected status the backend never documented) is a :class:`RejectedOrder`
+    with a mapped :data:`OrderResponseErrorCode` (specific codes for the known
+    rejection statuses, ``"unknown"`` otherwise). Field names track py-sdk so a
+    ported bot's ``resp.ok`` / ``resp.order_id`` / ``resp.status`` read identically.
     """
     if not isinstance(raw, dict):
         raise UnexpectedResponseError("order response did not match expected shape")
@@ -427,13 +465,23 @@ def adapt_order_response(raw: Any) -> OrderResponse:
     status_key = status_raw.lower()
     success = raw.get("success")
     order_id = str(raw.get("order_id", "") or raw.get("id", "") or "")
+    error_message = str(
+        raw.get("error") or raw.get("message") or raw.get("detail") or ""
+    )
 
-    rejected = success is False or status_key in _STATUS_TO_ERROR_CODE
-    if rejected:
+    # py-sdk allowlist: accepted requires ALL four — a recognised accepted status,
+    # success not explicitly false, a non-empty order id, and no error message.
+    # (The paper backend omits ``success`` on accepted rows, so absence is truthy;
+    # only an explicit ``success: false`` rejects on that axis.)
+    accepted = (
+        status_key in _ACCEPTED_STATUSES
+        and success is not False
+        and order_id != ""
+        and error_message == ""
+    )
+    if not accepted:
         code = _STATUS_TO_ERROR_CODE.get(status_key, "unknown")
-        message = str(
-            raw.get("error") or raw.get("message") or raw.get("detail") or status_raw or "rejected"
-        )
+        message = error_message or status_raw or "rejected"
         return RejectedOrder(code=code, message=message)
 
     return AcceptedOrder(
@@ -517,4 +565,5 @@ __all__ = [
     "paper_order_kwargs",
     "split_token_local",
     "validate_cancel_order_ids",
+    "validate_token_id",
 ]

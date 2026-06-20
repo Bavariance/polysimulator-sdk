@@ -10,7 +10,7 @@ permissive parsers field-for-field so the parsed scalar types match.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Annotated
 
@@ -44,7 +44,7 @@ def _parse_epoch_ms_timestamp(value: object) -> object:
         raise ValueError(f"invalid epoch-ms timestamp: {value!r}")
     ms = int(value)
     try:
-        return datetime.fromtimestamp(ms / 1000, tz=UTC)
+        return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
     except (OverflowError, OSError, ValueError) as error:
         raise ValueError(f"invalid epoch-ms timestamp: {value!r}") from error
 
@@ -58,18 +58,23 @@ def _parse_epoch_ms_or_iso_timestamp(value: object) -> object:
         raise ValueError(f"expected timestamp, got bool {value!r}")
     if isinstance(value, int):
         try:
-            return datetime.fromtimestamp(value / 1000, tz=UTC)
+            return datetime.fromtimestamp(value / 1000, tz=timezone.utc)
         except (OverflowError, OSError, ValueError) as error:
             raise ValueError(f"invalid epoch-ms timestamp: {value!r}") from error
     if isinstance(value, str):
         if value.isdecimal():
             ms = int(value)
             try:
-                return datetime.fromtimestamp(ms / 1000, tz=UTC)
+                return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
             except (OverflowError, OSError, ValueError) as error:
                 raise ValueError(f"invalid epoch-ms timestamp: {value!r}") from error
+        # 3.10's ``datetime.fromisoformat`` does NOT accept a trailing ``Z``
+        # (Zulu/UTC) — that only landed in 3.11. The package floor is 3.10, so
+        # normalise a trailing ``Z`` to ``+00:00`` before parsing, matching how
+        # the rest of the SDK (``polysim_sdk.updown._parse_iso``) handles it.
+        iso = value[:-1] + "+00:00" if value.endswith(("Z", "z")) else value
         try:
-            return datetime.fromisoformat(value)
+            return datetime.fromisoformat(iso)
         except ValueError as error:
             raise ValueError(f"invalid timestamp: {value!r}") from error
     raise ValueError(f"expected epoch-ms or ISO timestamp, got {type(value).__name__}")
@@ -92,7 +97,7 @@ def _parse_epoch_seconds_or_ms_timestamp(value: object) -> object:
         raise ValueError(f"expected epoch timestamp, got {type(value).__name__}")
     seconds = magnitude / 1000 if magnitude >= _EPOCH_MS_THRESHOLD else magnitude
     try:
-        return datetime.fromtimestamp(seconds, tz=UTC)
+        return datetime.fromtimestamp(seconds, tz=timezone.utc)
     except (OverflowError, OSError, ValueError) as error:
         raise ValueError(f"invalid epoch timestamp: {value!r}") from error
 
@@ -113,7 +118,7 @@ def _parse_epoch_seconds_timestamp(value: object) -> object:
     else:
         raise ValueError(f"expected epoch-seconds timestamp, got {type(value).__name__}")
     try:
-        return datetime.fromtimestamp(seconds, tz=UTC)
+        return datetime.fromtimestamp(seconds, tz=timezone.utc)
     except (OverflowError, OSError, ValueError) as error:
         raise ValueError(f"invalid epoch-seconds timestamp: {value!r}") from error
 

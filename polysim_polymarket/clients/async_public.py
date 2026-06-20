@@ -433,18 +433,15 @@ class AsyncPublicClient:
         parity and ignored.
         """
         forward = _common.list_markets_forward(closed=closed, order=order, ascending=ascending)
+        limit = _common.resolve_page_size(page_size)
 
         async def fetch(cursor: str | None) -> Page[Market]:
             offset = _decode_cursor(cursor)
             if offset < 0:
                 return Page(items=(), has_more=False)
-            rows = await self._client.list_markets(
-                limit=_common.PAGE_LIMIT, offset=offset, **forward
-            )
+            rows = await self._client.list_markets(limit=limit, offset=offset, **forward)
             items = tuple(_common.adapt_market(row) for row in rows)
-            next_cur = _next_cursor(offset, len(rows), _common.PAGE_LIMIT)
-            return Page(
-                items=items, has_more=len(rows) >= _common.PAGE_LIMIT, next_cursor=next_cur
-            )
+            next_cur = _next_cursor(offset, len(rows), limit)
+            return Page(items=items, has_more=len(rows) >= limit, next_cursor=next_cur)
 
         return AsyncPaginator(fetch=fetch)

@@ -32,6 +32,7 @@ from polysim_sdk._http import (
     AsyncTransport,
     unwrap_list,
 )
+from polysim_sdk._version import DEFAULT_USER_AGENT
 
 
 class AsyncPolySimClient:
@@ -49,7 +50,7 @@ class AsyncPolySimClient:
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
         floor_interval: float = DEFAULT_FLOOR_INTERVAL_SECONDS,
-        user_agent: str = "polysim-sdk/0.2.2",
+        user_agent: str = DEFAULT_USER_AGENT,
     ) -> None:
         resolved_key = api_key or os.environ.get("POLYSIM_API_KEY")
         if not resolved_key:
@@ -607,7 +608,7 @@ class AsyncPolySimClient:
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
         floor_interval: float = DEFAULT_FLOOR_INTERVAL_SECONDS,
-        user_agent: str = "polysim-sdk/0.2.2",
+        user_agent: str = DEFAULT_USER_AGENT,
     ) -> dict[str, Any]:
         """``POST /v1/keys/bootstrap`` — JWT-authed first-key mint, no key needed.
 

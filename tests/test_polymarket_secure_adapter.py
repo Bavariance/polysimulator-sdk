@@ -182,10 +182,14 @@ def test_get_balance_allowance_usd_to_base_units(secure, respx_mock):
 
 
 def test_get_balance_allowance_cash_fallback_key(secure, respx_mock):
+    # COLLATERAL reads cash; the ``cash`` fallback key is honoured when the
+    # payload has no top-level ``balance`` field. (CONDITIONAL now reports the
+    # conditional-token position balance, not cash — see
+    # test_polymarket_conditional_balance.py.)
     respx_mock.get(f"{BASE_URL}/v1/account/balance").mock(
         return_value=httpx.Response(200, json={"cash": 100.5})
     )
-    ba = secure.get_balance_allowance(asset_type="CONDITIONAL")
+    ba = secure.get_balance_allowance(asset_type="COLLATERAL")
     assert ba.balance == 100_500_000
 
 

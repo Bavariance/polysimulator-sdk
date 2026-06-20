@@ -40,6 +40,22 @@ def test_decode_cursor_roundtrip_and_sentinels():
     assert _decode_cursor("not-base64!!") == 0
 
 
+def test_decode_cursor_never_raises_on_malformed_input():
+    """A malformed cursor must decode to a safe ``0`` rather than RAISING any
+    error type (broadened-except defense — a bad cursor can't crash a paginator)."""
+    malformed = [
+        "====",  # invalid padding
+        "a",  # length-1, can't be base64
+        "bm90YW51bWJlcg==",  # valid base64 of a non-numeric string
+        "\xff\xff",  # non-ASCII
+        "!!!bad",  # invalid chars
+        "  ",  # whitespace
+    ]
+    for c in malformed:
+        # Must not raise; the fallback is 0.
+        assert _decode_cursor(c) == 0, f"cursor {c!r} did not decode to 0"
+
+
 def test_next_cursor_terminates_on_short_page():
     # Full page -> advance by limit; short page -> END sentinel.
     assert _next_cursor(0, 100, 100) == _encode_cursor(100)

@@ -43,6 +43,25 @@ def _assert_paper_outcome(outcome: object) -> None:
     assert outcome.transaction_id is None
 
 
+# ── annotation resolvability (get_type_hints) ────────────────────────────────
+
+
+def test_get_type_hints_resolves_sync_transaction_handle() -> None:
+    """The on-chain methods annotate ``-> SyncTransactionHandle``; that forward
+    reference must resolve at runtime so ``typing.get_type_hints`` works (a tool
+    or doc generator that introspects the SecureClient must not NameError)."""
+    import inspect
+    import typing
+
+    failures: list[str] = []
+    for name, method in inspect.getmembers(SecureClient, predicate=inspect.isfunction):
+        try:
+            typing.get_type_hints(method)
+        except NameError as exc:
+            failures.append(f"{name}: {exc}")
+    assert not failures, "get_type_hints failed:\n" + "\n".join(failures)
+
+
 # ── instant-success paper handles ────────────────────────────────────────────
 
 

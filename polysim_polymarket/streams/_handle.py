@@ -19,7 +19,11 @@ import asyncio
 import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from types import TracebackType
-from typing import Generic, Protocol, Self, TypeVar, runtime_checkable
+from typing import Generic, Protocol, TypeVar, runtime_checkable
+
+# ``typing.Self`` is 3.11-only; the package floor is 3.10, so source it from
+# ``typing_extensions`` (a declared dependency) for a single 3.10-safe symbol.
+from typing_extensions import Self
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
@@ -62,6 +66,10 @@ class AsyncSubscriptionHandle(Generic[T]):
         self._ended = False
         self._dropped = 0
         self._end_error: BaseException | None = None
+        # Set once the end sentinel has been consumed by ``__anext__``. After
+        # that the handle is permanently terminal: a further ``__anext__`` must
+        # re-raise the terminal outcome WITHOUT blocking on the (now-empty) queue.
+        self._terminated = False
         self._closing: asyncio.Task[None] | None = None
         self._on_close: Callable[[AsyncSubscriptionHandle[T]], Awaitable[None]] | None = None
 
@@ -116,8 +124,16 @@ class AsyncSubscriptionHandle(Generic[T]):
         return self
 
     async def __anext__(self) -> T:
+        # Once the end sentinel has been consumed the handle is terminal: re-raise
+        # the terminal outcome immediately instead of blocking on the empty queue
+        # (the sentinel is single-use — a second ``get()`` would hang forever).
+        if self._terminated:
+            if self._end_error is not None:
+                raise self._end_error
+            raise StopAsyncIteration
         item = await self._queue.get()
         if isinstance(item, _EndSentinel):
+            self._terminated = True
             if self._end_error is not None:
                 raise self._end_error
             raise StopAsyncIteration

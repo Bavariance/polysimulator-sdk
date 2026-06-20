@@ -24,12 +24,12 @@ from decimal import Decimal
 import httpx
 import pytest
 
-polymarket = pytest.importorskip("polymarket")
+from polysim_polymarket import AsyncPublicClient as MirrorAsyncPublicClient
 
-from polymarket import PRODUCTION as REAL_PRODUCTION  # noqa: E402
-from polymarket.clients.async_public import AsyncPublicClient as RealAsyncPublicClient  # noqa: E402
-
-from polysim_polymarket import AsyncPublicClient as MirrorAsyncPublicClient  # noqa: E402
+# The real ``polymarket`` import-skip lives INSIDE the real_client fixture (not
+# at module scope) so a missing real py-sdk skips only the tests that compare
+# against it — the mirror fixture / mirror-only assertions never depend on the
+# real package being installed.
 
 MIRROR_HOST = "https://mirror.async.parity.test"
 REAL_HOST = "https://realpysdk.async.parity.test"
@@ -66,6 +66,10 @@ async def mirror_client():
 
 @pytest.fixture
 async def real_client():
+    pytest.importorskip("polymarket")
+    from polymarket import PRODUCTION as REAL_PRODUCTION
+    from polymarket.clients.async_public import AsyncPublicClient as RealAsyncPublicClient
+
     env = replace(
         REAL_PRODUCTION,
         clob_url=REAL_HOST,

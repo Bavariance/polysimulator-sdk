@@ -17,6 +17,7 @@ authenticated-surface logic the public client has no analog for.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from polysim_polymarket.errors import UnexpectedResponseError, UserInputError
@@ -69,8 +70,13 @@ def validate_asset_type(asset_type: object) -> None:
     Mirrors py-sdk's ``account._validate_asset_type`` (case-SENSITIVE — there is
     no ``.upper()``): anything else raises ``UserInputError`` with py-sdk's exact
     message, before any read.
+
+    The ``isinstance(asset_type, str)`` guard runs FIRST so an unhashable arg (a
+    ``list`` / ``dict`` a bot might pass by mistake) raises ``UserInputError``
+    rather than letting a ``TypeError`` escape the ``in`` membership test against
+    the frozenset.
     """
-    if asset_type not in VALID_ASSET_TYPES:
+    if not isinstance(asset_type, str) or asset_type not in VALID_ASSET_TYPES:
         raise UserInputError(
             f"asset_type must be 'COLLATERAL' or 'CONDITIONAL', got {asset_type!r}."
         )
@@ -118,6 +124,11 @@ def adapt_balance_allowance(payload: Any) -> BalanceAllowance:
     nearest base unit. Paper trading has no on-chain allowance, so ``allowances``
     is empty.
 
+    The scaling goes through :class:`~decimal.Decimal` (``Decimal(str(raw))``),
+    not ``float``, so a monetary value with binary-float drift (e.g. a value
+    whose ``float * 1e6`` would round to the wrong base-unit count) converts
+    exactly — money never rides a binary float through this adapter.
+
     A malformed payload (not a dict, or no numeric balance field) raises
     ``UnexpectedResponseError`` rather than silently reporting zero — a porting
     author should see the shape mismatch, not a wrong $0 balance.
@@ -132,12 +143,51 @@ def adapt_balance_allowance(payload: Any) -> BalanceAllowance:
     if raw is None:
         raise UnexpectedResponseError("balance response did not match expected shape")
     try:
-        usd = float(raw)
-    except (TypeError, ValueError) as error:
+        # ``Decimal(str(raw))`` keeps full decimal precision (str() avoids the
+        # binary-float artefacts of Decimal(<float>)); round half-even to the
+        # nearest integer base unit.
+        usd = Decimal(str(raw))
+    except (TypeError, ValueError, InvalidOperation) as error:
         raise UnexpectedResponseError(
             f"balance response 'balance' was not numeric: {raw!r}"
         ) from error
-    base_units = round(usd * USDC_BASE_UNITS_PER_USD)
+    base_units = int(round(usd * USDC_BASE_UNITS_PER_USD))
+    return BalanceAllowance(balance=base_units, allowances={})
+
+
+def adapt_conditional_balance(
+    positions: Any, market_id: str, outcome: str
+) -> BalanceAllowance:
+    """Adapt the open-positions list onto a CONDITIONAL ``BalanceAllowance``.
+
+    Resolution of the CodeRabbit/Codex disagreement: the real py-sdk's
+    ``get_balance_allowance`` for ``asset_type='CONDITIONAL'`` returns the
+    **conditional TOKEN** balance the server holds for that ``token_id`` (the
+    position's share count), NOT collateral cash. PolySimulator is paper trading
+    with no on-chain CTF balance, so the faithful analog is the open position's
+    share count for the resolved ``(market_id, outcome)`` — the conditional token
+    Polymarket would settle. Both the conditional token and USDC carry 6 decimals,
+    so the share count scales by :data:`USDC_BASE_UNITS_PER_USD`; a flat / absent
+    position is a genuine 0 conditional balance (not an error). Outcome matching
+    is case-insensitive (positions store ``"Yes"`` / ``"No"``; the token resolver
+    returns ``"YES"`` / ``"NO"`` / ``"UP"`` / ``"DOWN"``). Paper trading has no
+    on-chain allowance, so ``allowances`` is empty.
+    """
+    rows = positions if isinstance(positions, list) else []
+    target_outcome = outcome.upper()
+    shares = Decimal("0")
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("market_id")) != str(market_id):
+            continue
+        if str(row.get("outcome", "")).upper() != target_outcome:
+            continue
+        try:
+            shares += Decimal(str(row.get("quantity", "0")))
+        except (TypeError, ValueError, InvalidOperation):
+            continue
+    base_units = int(round(shares * USDC_BASE_UNITS_PER_USD))
     return BalanceAllowance(balance=base_units, allowances={})
 
 

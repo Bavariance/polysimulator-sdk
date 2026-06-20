@@ -112,6 +112,7 @@ from polysim_polymarket.rfq import (
     RfqSession,
     RfqSide,
 )
+from polysim_sdk import __version__
 
 # py-sdk exports ``SyncTransactionHandle`` (a ``TypeAlias`` for the
 # gasless|EOA sync-handle union) off its root; a ported bot type-hints
@@ -151,6 +152,7 @@ from polysim_polymarket.rfq import (
 # Each is verified present on py-sdk's root by the re-export subset test.
 __all__ = [
     "PRODUCTION",
+    "__version__",
     "AcceptedOrder",
     "ApiKeyCreds",
     "AssetType",

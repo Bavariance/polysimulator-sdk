@@ -67,6 +67,7 @@ SEAMS — documented, not fabricated:
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from polysim_polymarket.streams._crypto_events import (
@@ -149,6 +150,34 @@ def _split_condition_id(token_id: str) -> str:
         if condition_id:
             return condition_id
     return tid
+
+
+def _parse_fill_timestamp(value: Any) -> datetime | None:
+    """Parse a fill frame's ``filled_at`` into an aware UTC datetime, or ``None``.
+
+    The backend stamps ``filled_at`` as an ISO-8601 string (``Order.filled_at``'s
+    ``.isoformat()``), but a frame may also carry an epoch-seconds / epoch-ms
+    value. The user-event payloads' ``timestamp`` is an
+    ``EpochSecondsOrMsTimestamp`` whose validator accepts a ``datetime`` as-is but
+    NOT an ISO string, so we resolve ISO here (normalising a trailing ``Z`` for
+    3.10's ``fromisoformat``) and let an already-numeric value flow through the
+    validator. A bad/None value yields ``None`` (the timestamp stays unset)
+    rather than sinking an otherwise-valid event.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and not value.isdecimal():
+        text = value
+        if text.endswith(("Z", "z")):
+            text = text[:-1] + "+00:00"
+        try:
+            dt = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+    return None
 
 
 def _coerce_epoch_ms_str(value: Any) -> str | None:
@@ -306,41 +335,66 @@ def adapt_execution_frame(frame: dict[str, Any], spec: UserSpec) -> list[UserEve
     if token_id is None:
         return []
 
-    trade = UserTradeEvent.model_validate(
-        {
-            "type": "trade",
-            "payload": {
-                "id": order_id,
-                "taker_order_id": order_id,
-                "market": market,
-                "asset_id": token_id,
-                "side": side,
-                "size": quantity,
-                "price": price,
-                "status": "MATCHED",
-                "owner": "",
-                "outcome": outcome,
-            },
-        }
-    )
-    order = UserOrderEvent.model_validate(
-        {
-            "type": "order",
-            "payload": {
-                "id": order_id,
-                "owner": "",
-                "market": market,
-                "asset_id": token_id,
-                "side": side,
-                "original_size": quantity,
-                "size_matched": quantity,
-                "price": price,
-                "type": "UPDATE",
-                "status": "MATCHED",
-                "outcome": outcome,
-            },
-        }
-    )
+    # The fill's ``filled_at`` is the trade/order timestamp. Carry it onto both
+    # payloads' ``timestamp`` (an ``EpochSecondsOrMsTimestamp``). That validator
+    # accepts an epoch number / digit-string and a ``datetime`` as-is, but NOT an
+    # ISO string — and the backend stamps ``filled_at`` as ISO — so resolve an
+    # ISO value to a ``datetime`` here and pass an epoch value through unchanged.
+    # A ``None`` / unparseable value leaves ``timestamp`` at its default ``None``.
+    raw_filled_at = frame.get("filled_at")
+    filled_at: Any
+    if isinstance(raw_filled_at, bool):
+        # ``bool`` is an ``int`` subclass — never a valid epoch; don't let
+        # ``True`` slip through as the epoch ``1`` (1970) timestamp.
+        filled_at = None
+    elif isinstance(raw_filled_at, (int, float, datetime)):
+        # epoch seconds/ms or an already-resolved datetime — the validator
+        # accepts these as-is.
+        filled_at = raw_filled_at
+    elif isinstance(raw_filled_at, str):
+        # a digit-string epoch passes straight through; an ISO (or other)
+        # string is resolved to a datetime here (or ``None`` if unparseable).
+        filled_at = (
+            raw_filled_at
+            if raw_filled_at.isdecimal()
+            else _parse_fill_timestamp(raw_filled_at)
+        )
+    else:
+        # dict / list / unexpected type — never forward it into ``timestamp``,
+        # which would make ``model_validate`` raise and sink the whole fill.
+        filled_at = None
+
+    trade_payload: dict[str, Any] = {
+        "id": order_id,
+        "taker_order_id": order_id,
+        "market": market,
+        "asset_id": token_id,
+        "side": side,
+        "size": quantity,
+        "price": price,
+        "status": "MATCHED",
+        "owner": "",
+        "outcome": outcome,
+    }
+    order_payload: dict[str, Any] = {
+        "id": order_id,
+        "owner": "",
+        "market": market,
+        "asset_id": token_id,
+        "side": side,
+        "original_size": quantity,
+        "size_matched": quantity,
+        "price": price,
+        "type": "UPDATE",
+        "status": "MATCHED",
+        "outcome": outcome,
+    }
+    if filled_at is not None and filled_at != "":
+        trade_payload["timestamp"] = filled_at
+        order_payload["timestamp"] = filled_at
+
+    trade = UserTradeEvent.model_validate({"type": "trade", "payload": trade_payload})
+    order = UserOrderEvent.model_validate({"type": "order", "payload": order_payload})
     return [trade, order]
 
 

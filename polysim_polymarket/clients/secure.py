@@ -67,7 +67,7 @@ import logging
 from collections.abc import Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from polysim_polymarket.clients import _account, _onchain, _trade
 from polysim_polymarket.clients.public import PublicClient
@@ -106,13 +106,15 @@ from polysim_polymarket.models import (
 )
 from polysim_polymarket.pagination import Page, Paginator, _EmptyPaginator
 
-if TYPE_CHECKING:
-    # ``SyncTransactionHandle`` is the py-sdk name for the on-chain return type (an
-    # alias of the paper handle, defined in ``_onchain``). Imported under
-    # TYPE_CHECKING so the on-chain methods can annotate ``-> SyncTransactionHandle``
-    # with the bare py-sdk name (annotation-string parity) without a runtime import;
-    # the returned object is the same ``_onchain`` paper handle either way.
-    from polysim_polymarket.clients._onchain import SyncTransactionHandle
+# ``SyncTransactionHandle`` is the py-sdk name for the on-chain return type (an
+# alias of the paper handle, defined in ``_onchain``). The on-chain methods
+# annotate ``-> SyncTransactionHandle`` with the bare py-sdk name (annotation
+# parity); ``_onchain`` is already imported above, so bind the name into this
+# module's globals at RUNTIME (not only under TYPE_CHECKING) — otherwise
+# ``typing.get_type_hints(SecureClient.<onchain method>)`` raises ``NameError``,
+# breaking any tool / doc generator that introspects the client. The returned
+# object is the same ``_onchain`` paper handle either way.
+SyncTransactionHandle = _onchain.SyncTransactionHandle
 
 
 class SecureClient:
@@ -450,13 +452,25 @@ class SecureClient:
         case-SENSITIVE (``"COLLATERAL"`` / ``"CONDITIONAL"`` only — py-sdk's
         contract); anything else raises ``UserInputError`` before any read.
 
-        Maps to PolySimulator paper cash: reads ``GET /v1/account/balance`` and
-        adapts the (USD, float) paper-cash figure onto py-sdk's base-unit
-        :class:`BalanceAllowance` shape (USDC has 6 decimals, so 1 USD = 1_000_000
-        base units). Paper trading has no on-chain allowance, so ``allowances`` is
-        empty — matching the v1 mirror's "no allowance on paper" semantics.
+        * ``COLLATERAL`` reads ``GET /v1/account/balance`` and adapts the (USD)
+          paper-cash figure onto py-sdk's base-unit shape (USDC has 6 decimals,
+          so 1 USD = 1_000_000 base units).
+        * ``CONDITIONAL`` reports the conditional TOKEN balance — matching the
+          real py-sdk, where a CONDITIONAL read returns the held conditional-token
+          balance for ``token_id`` (NOT collateral). ``token_id`` is required; it
+          is resolved to ``(market_id, outcome)`` and the open position's share
+          count is reported in base units (a flat position is a genuine 0).
+
+        Paper trading has no on-chain allowance, so ``allowances`` is empty —
+        matching the v1 mirror's "no allowance on paper" semantics.
         """
         _account.validate_asset_type(asset_type)
+        if asset_type == "CONDITIONAL":
+            if not token_id:
+                raise UserInputError("token_id is required for a CONDITIONAL balance.")
+            market_id, outcome = self._resolve_coordinates(token_id)
+            positions = self._client.positions()
+            return _account.adapt_conditional_balance(positions, market_id, outcome)
         payload = self._client.balance()
         return _account.adapt_balance_allowance(payload)
 
@@ -572,7 +586,12 @@ class SecureClient:
         market + outcome. All the routing logic is the transport-free
         :mod:`~polysim_polymarket.clients._trade` seam; only the network fetch
         lives here.
+
+        ``token_id`` is validated (non-empty string) UP FRONT — before the
+        reverse-resolution ``GET /v1/markets-by-token`` network call — so a bad
+        token raises ``UserInputError`` rather than hitting the network.
         """
+        _trade.validate_token_id(token_id)
         if not _trade.needs_token_reverse_resolution(token_id):
             return _trade.split_token_local(token_id)
         cached = self._token_coordinates.get(token_id)

@@ -30,6 +30,7 @@ from urllib.parse import urljoin
 
 import httpx
 
+from polysim_sdk._version import DEFAULT_USER_AGENT
 from polysim_sdk.exceptions import (
     ApiError,
     EdgeBlockedError,
@@ -206,7 +207,7 @@ class SyncTransport:
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
         floor_interval: float = DEFAULT_FLOOR_INTERVAL_SECONDS,
-        user_agent: str = "polysim-sdk/0.2.2",
+        user_agent: str = DEFAULT_USER_AGENT,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self._max_retries = max_retries
@@ -317,7 +318,7 @@ class AsyncTransport:
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
         floor_interval: float = DEFAULT_FLOOR_INTERVAL_SECONDS,
-        user_agent: str = "polysim-sdk/0.2.2",
+        user_agent: str = DEFAULT_USER_AGENT,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self._max_retries = max_retries

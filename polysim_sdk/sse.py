@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from polysim_sdk._http import raise_for_status, resolve_url
+from polysim_sdk._version import DEFAULT_USER_AGENT
 
 if TYPE_CHECKING:
     from polysim_sdk.aio import AsyncPolySimClient
@@ -170,7 +171,7 @@ def spot_stream(
     backoff = reconnect_min_interval
     attempts = 0
     url = resolve_url(client.base_url, "/prices/stream")
-    headers = _sse_headers(client._api_key, "polysim-sdk/0.2.2")
+    headers = _sse_headers(client._api_key, DEFAULT_USER_AGENT)
     with httpx.Client(timeout=_stream_timeout()) as http:
         while True:
             try:
@@ -228,7 +229,7 @@ async def aspot_stream(
     backoff = reconnect_min_interval
     attempts = 0
     url = resolve_url(client.base_url, "/prices/stream")
-    headers = _sse_headers(client._api_key, "polysim-sdk/0.2.2")
+    headers = _sse_headers(client._api_key, DEFAULT_USER_AGENT)
     async with httpx.AsyncClient(timeout=_stream_timeout()) as http:
         while True:
             try:

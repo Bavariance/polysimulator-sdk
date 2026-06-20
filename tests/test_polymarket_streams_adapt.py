@@ -42,6 +42,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
+
 from polysim_polymarket.streams import (
     CryptoPricesBinanceEvent,
     CryptoPricesChainlinkEvent,
@@ -338,6 +340,55 @@ def test_adapt_execution_order_field_mapping() -> None:
     assert order.payload.side == "BUY"
     # id stays the real order id; token_id is the honest market:OUTCOME token.
     assert order.payload.token_id == "0xMARKET:YES"
+
+
+def test_adapt_execution_preserves_filled_at_timestamp() -> None:
+    """The fill's ``filled_at`` must ride onto BOTH event payloads' ``timestamp``
+    (it was dropped — the timestamp was always None)."""
+    import datetime as _dt
+
+    spec = UserSpec()
+    events = adapt_execution_frame(_fill_frame(), spec)
+    trade = next(e for e in events if isinstance(e, UserTradeEvent))
+    order = next(e for e in events if isinstance(e, UserOrderEvent))
+    assert trade.payload.timestamp is not None
+    assert isinstance(trade.payload.timestamp, _dt.datetime)
+    assert order.payload.timestamp is not None
+    assert isinstance(order.payload.timestamp, _dt.datetime)
+    # 2026-06-14T12:00:00+00:00
+    assert trade.payload.timestamp.year == 2026
+    assert trade.payload.timestamp.utcoffset() == _dt.timedelta(0)
+
+
+def test_adapt_execution_epoch_filled_at() -> None:
+    """An epoch-ms ``filled_at`` lands on BOTH the trade and order timestamp."""
+    spec = UserSpec()
+    frame = _fill_frame()
+    frame["filled_at"] = 1750000000000  # epoch ms
+    events = adapt_execution_frame(frame, spec)
+    trade = next(e for e in events if isinstance(e, UserTradeEvent))
+    order = next(e for e in events if isinstance(e, UserOrderEvent))
+    assert trade.payload.timestamp is not None
+    assert order.payload.timestamp is not None
+
+
+@pytest.mark.parametrize("bad_filled_at", [True, False, {}, [], object()])
+def test_adapt_execution_invalid_filled_at_type_leaves_timestamp_unset(
+    bad_filled_at: object,
+) -> None:
+    """A non-str / non-numeric ``filled_at`` (bool, dict, list, …) must NOT be
+    forwarded into ``timestamp``: doing so would either mis-stamp the fill (a
+    ``bool`` is an ``int`` subclass → epoch 1) or make ``model_validate`` raise
+    and silently drop an otherwise-valid fill. Both events are still emitted,
+    with the timestamp left unset."""
+    spec = UserSpec()
+    frame = _fill_frame()
+    frame["filled_at"] = bad_filled_at
+    events = adapt_execution_frame(frame, spec)
+    trade = next(e for e in events if isinstance(e, UserTradeEvent))
+    order = next(e for e in events if isinstance(e, UserOrderEvent))
+    assert trade.payload.timestamp is None
+    assert order.payload.timestamp is None
 
 
 def test_adapt_execution_token_id_no_outcome() -> None:

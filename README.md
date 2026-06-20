@@ -299,7 +299,7 @@ The port is the same mechanical swap as v1 — change the import **prefix**, the
 - from polymarket import SecureClient
 + from polysim_polymarket import SecureClient
 
-- client = SecureClient(private_key="0x…")       # real Polymarket wallet + EIP-712 signing
+- client = SecureClient.create(private_key="0x…")  # real Polymarket wallet + EIP-712 signing
 + client = SecureClient(host="https://api.polysimulator.com", api_key="ps_live_…")
 
   # unchanged from here on — same method names, same keyword-only call shapes,
@@ -362,8 +362,13 @@ they're getting before they rely on a surface area:
   happens entirely in PolySimulator's paper matching engine.
 - **Collateral / balances are PAPER.** Your balance is PolySimulator's paper
   balance (the `balance` from `me()` on the native client), not an on-chain USDC
-  balance. `get_balance_allowance` reports the paper account's collateral; there
-  is no real USDC, no allowance/approval transaction, no funder wallet.
+  balance. `get_balance_allowance(asset_type="COLLATERAL")` reports the paper
+  account's cash collateral; `get_balance_allowance(asset_type="CONDITIONAL",
+  token_id=…)` reports the **conditional-token** balance — the open position's
+  share count for that token, in base units (matching real py-sdk, where a
+  CONDITIONAL read returns the held conditional token, not collateral; a flat
+  position is `0`). There is no real USDC, no allowance/approval transaction, no
+  funder wallet — so `allowances` is always empty.
 - **A settled trade carries the per-fill fee RATE, not a fee amount.**
   PolySimulator's matching engine charges and records a real (paper) fee on each
   fill. What it surfaces over the typed read surface is the fee *rate*: a settled

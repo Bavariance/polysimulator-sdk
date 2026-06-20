@@ -21,7 +21,7 @@ exactly so the scalar types match. Timestamps mirror py-sdk's epoch-ms parsing.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Literal, NamedTuple, TypeAlias
 
@@ -80,7 +80,7 @@ def _parse_epoch_ms_timestamp(value: object) -> object:
         raise ValueError(f"invalid epoch-ms timestamp: {value!r}")
     ms = int(value)
     try:
-        return datetime.fromtimestamp(ms / 1000, tz=UTC)
+        return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
     except (OverflowError, OSError, ValueError) as error:
         raise ValueError(f"invalid epoch-ms timestamp: {value!r}") from error
 

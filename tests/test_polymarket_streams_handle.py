@@ -94,6 +94,37 @@ async def test_end_with_error_raises_at_end_of_stream() -> None:
     assert collected == [1]
 
 
+async def test_handle_stays_terminal_after_first_end_sentinel() -> None:
+    """A SECOND ``__anext__`` after the end-sentinel was consumed must raise
+    StopAsyncIteration AGAIN immediately — it must NOT re-block on an empty queue
+    (the end sentinel is popped off, so a naive get() would hang forever)."""
+    h: AsyncSubscriptionHandle[int] = AsyncSubscriptionHandle(queue_size=4)
+    h._push(1)
+    await h.close()  # ends the stream
+
+    assert await h.__anext__() == 1
+    with pytest.raises(StopAsyncIteration):
+        await h.__anext__()  # consumes the sentinel
+    # The handle must stay terminal: a second post-end call returns immediately.
+    with pytest.raises(StopAsyncIteration):
+        await asyncio.wait_for(h.__anext__(), timeout=1.0)
+    # And a third, for good measure.
+    with pytest.raises(StopAsyncIteration):
+        await asyncio.wait_for(h.__anext__(), timeout=1.0)
+
+
+async def test_handle_terminal_after_error_end_does_not_reblock() -> None:
+    """After an error-end is raised once, a subsequent ``__anext__`` must not
+    block; it re-raises the terminal error (or StopAsyncIteration)."""
+    h: AsyncSubscriptionHandle[int] = AsyncSubscriptionHandle(queue_size=4)
+    h._end(ValueError("broke"))
+    with pytest.raises(ValueError, match="broke"):
+        await h.__anext__()
+    # Must not re-block on the now-empty queue.
+    with pytest.raises((ValueError, StopAsyncIteration)):
+        await asyncio.wait_for(h.__anext__(), timeout=1.0)
+
+
 async def test_async_context_manager_closes_on_exit() -> None:
     calls: list[str] = []
 

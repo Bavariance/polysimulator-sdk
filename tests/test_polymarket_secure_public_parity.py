@@ -185,15 +185,18 @@ def test_secure_empty_token_guard_carries_through_delegation(
 
 
 # ── mirror SecureClient read == REAL py-sdk read ────────────────────────────
-
-polymarket = pytest.importorskip("polymarket")
-
-from polymarket import PRODUCTION as REAL_PRODUCTION  # noqa: E402
-from polymarket.clients.public import PublicClient as RealPublicClient  # noqa: E402
+# The real ``polymarket`` import-skip lives INSIDE the fixture (not at module
+# scope) so a missing real py-sdk skips ONLY the real-comparison tests below —
+# the mirror-only tests above (mirror SecureClient == mirror PublicClient) still
+# run regardless of whether ``polymarket-client`` is installed.
 
 
 @pytest.fixture
 def real_public_client():
+    pytest.importorskip("polymarket")
+    from polymarket import PRODUCTION as REAL_PRODUCTION
+    from polymarket.clients.public import PublicClient as RealPublicClient
+
     env = replace(
         REAL_PRODUCTION,
         clob_url=REAL_HOST,

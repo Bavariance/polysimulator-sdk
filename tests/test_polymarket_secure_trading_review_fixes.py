@@ -134,7 +134,7 @@ def test_market_buy_max_spend_below_amount_clamps_submitted_amount(secure, respx
     order = secure.create_market_order(
         token_id=COLON_TOKEN, side="BUY", amount="50", max_spend="12"
     )
-    assert order.paper_body["amount"] == 12.0
+    assert order.paper_body["amount"] == "12"
 
 
 def test_market_buy_max_spend_above_amount_leaves_amount(secure, respx_mock):
@@ -142,7 +142,7 @@ def test_market_buy_max_spend_above_amount_leaves_amount(secure, respx_mock):
     order = secure.create_market_order(
         token_id=COLON_TOKEN, side="BUY", amount="50", max_spend="80"
     )
-    assert order.paper_body["amount"] == 50.0
+    assert order.paper_body["amount"] == "50"
 
 
 def test_market_buy_max_spend_equal_amount_leaves_amount(secure, respx_mock):
@@ -150,7 +150,7 @@ def test_market_buy_max_spend_equal_amount_leaves_amount(secure, respx_mock):
     order = secure.create_market_order(
         token_id=COLON_TOKEN, side="BUY", amount="50", max_spend="50"
     )
-    assert order.paper_body["amount"] == 50.0
+    assert order.paper_body["amount"] == "50"
 
 
 def test_market_buy_clamp_matches_pysdk_no_fee_semantics():
@@ -296,14 +296,16 @@ def test_cancel_orders_all_valid_ids_still_loop(secure, respx_mock):
 def test_paper_order_kwargs_projects_limit_body():
     from polysim_polymarket.clients import _trade
 
+    # The build path now emits decimal STRINGS for price/quantity; paper_order_kwargs
+    # is a pure key projection (it passes the body's values through unchanged).
     body = {
         "market_id": "0xcond",
         "outcome": "YES",
         "side": "BUY",
-        "price": 0.55,
+        "price": "0.55",
         "order_type": "limit",
         "time_in_force": "GTC",
-        "quantity": 10.0,
+        "quantity": "10",
     }
     kwargs = _trade.paper_order_kwargs(body)
     assert kwargs["market_id"] == "0xcond"
@@ -312,8 +314,8 @@ def test_paper_order_kwargs_projects_limit_body():
     assert kwargs["order_type"] == "limit"
     assert kwargs["time_in_force"] == "GTC"
     assert kwargs["post_only"] is False
-    assert kwargs["price"] == 0.55
-    assert kwargs["quantity"] == 10.0
+    assert kwargs["price"] == "0.55"
+    assert kwargs["quantity"] == "10"
     # absent optionals are OMITTED (never sent as None) so the wire matches the body
     assert "amount" not in kwargs
     assert "expiration" not in kwargs
@@ -328,12 +330,12 @@ def test_paper_order_kwargs_projects_market_buy_body():
         "side": "BUY",
         "order_type": "market",
         "time_in_force": "FAK",
-        "amount": 20.0,
-        "price": 0.99,
+        "amount": "20",
+        "price": "0.99",
     }
     kwargs = _trade.paper_order_kwargs(body)
-    assert kwargs["amount"] == 20.0
-    assert kwargs["price"] == 0.99
+    assert kwargs["amount"] == "20"
+    assert kwargs["price"] == "0.99"
     assert "quantity" not in kwargs
 
 
@@ -350,8 +352,8 @@ def test_post_order_and_post_orders_share_projection(secure, respx_mock):
     entry = sent["orders"][0]
     assert entry["market_id"] == "0xcond"
     assert entry["side"] == "BUY"
-    assert entry["price"] == 0.5
-    assert entry["quantity"] == 10.0
+    assert entry["price"] == "0.5"
+    assert entry["quantity"] == "10"
     assert entry["order_type"] == "limit"
     assert entry["post_only"] is False
     assert "amount" not in entry

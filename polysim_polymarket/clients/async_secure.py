@@ -57,7 +57,7 @@ import logging
 from collections.abc import Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Literal, overload
+from typing import Any, Literal, overload
 
 from polysim_polymarket.clients import _account, _onchain, _trade
 from polysim_polymarket.clients.async_public import AsyncPublicClient
@@ -106,13 +106,14 @@ from polysim_polymarket.streams import (
 )
 from polysim_polymarket.streams._stream_open import open_secure_stream as _open_secure_stream
 
-if TYPE_CHECKING:
-    # ``TransactionHandle`` is the py-sdk name for the ASYNC on-chain return type
-    # (an alias of the async paper handle, defined in ``_onchain``). Imported under
-    # TYPE_CHECKING so the on-chain methods can annotate ``-> TransactionHandle``
-    # with the bare py-sdk name (annotation-string parity) without a runtime
-    # import; the returned object is the same ``_onchain`` async paper handle.
-    from polysim_polymarket.clients._onchain import TransactionHandle
+# ``TransactionHandle`` is the py-sdk name for the ASYNC on-chain return type (an
+# alias of the async paper handle, defined in ``_onchain``). The on-chain methods
+# annotate ``-> TransactionHandle`` with the bare py-sdk name (annotation parity);
+# ``_onchain`` is already imported above, so bind the name into this module's
+# globals at RUNTIME (not only under TYPE_CHECKING) — otherwise
+# ``typing.get_type_hints(AsyncSecureClient.<onchain method>)`` raises
+# ``NameError``. The returned object is the same ``_onchain`` async paper handle.
+TransactionHandle = _onchain.TransactionHandle
 
 
 class AsyncSecureClient:
@@ -489,11 +490,20 @@ class AsyncSecureClient:
 
         Async twin of ``SecureClient.get_balance_allowance``: validates
         ``asset_type`` (case-SENSITIVE) via the shared
-        :func:`_account.validate_asset_type`, reads ``GET /v1/account/balance``
-        (awaited), and adapts the paper-cash figure onto py-sdk's base-unit
-        :class:`BalanceAllowance` via :func:`_account.adapt_balance_allowance`.
+        :func:`_account.validate_asset_type`. ``COLLATERAL`` awaits
+        ``GET /v1/account/balance`` and adapts the paper-cash figure;
+        ``CONDITIONAL`` (token_id required) resolves the token, awaits
+        ``GET /v1/account/positions`` and reports the open position's share count
+        as the conditional-token balance (matching real py-sdk's CONDITIONAL
+        semantics — the held conditional token, not collateral; flat = 0).
         """
         _account.validate_asset_type(asset_type)
+        if asset_type == "CONDITIONAL":
+            if not token_id:
+                raise UserInputError("token_id is required for a CONDITIONAL balance.")
+            market_id, outcome = await self._resolve_coordinates(token_id)
+            positions = await self._client.positions()
+            return _account.adapt_conditional_balance(positions, market_id, outcome)
         payload = await self._client.balance()
         return _account.adapt_balance_allowance(payload)
 
@@ -598,7 +608,12 @@ class AsyncSecureClient:
         reverse-resolved by awaiting ``GET /v1/markets-by-token/{id}`` (cached per
         token). All routing logic is the transport-free ``_trade`` seam; only the
         awaited fetch lives here.
+
+        ``token_id`` is validated (non-empty string) UP FRONT — before the
+        reverse-resolution network call — so a bad token raises ``UserInputError``
+        rather than hitting the network.
         """
+        _trade.validate_token_id(token_id)
         if not _trade.needs_token_reverse_resolution(token_id):
             return _trade.split_token_local(token_id)
         cached = self._token_coordinates.get(token_id)

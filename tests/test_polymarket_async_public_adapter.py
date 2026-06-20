@@ -447,3 +447,26 @@ async def test_list_markets_forwards_closed_filter(aclient, respx_mock):
     )
     await aclient.list_markets(closed=True).first_page()
     assert dict(route.calls.last.request.url.params).get("closed") == "true"
+
+
+async def test_list_markets_page_size_threads_to_request_limit(aclient, respx_mock):
+    """``page_size`` must drive the async fetch ``limit`` (was a NO-OP)."""
+    route = respx_mock.get(f"{BASE_URL}/v1/markets").mock(
+        return_value=httpx.Response(200, json={"markets": []})
+    )
+    await aclient.list_markets(page_size=5).first_page()
+    assert dict(route.calls.last.request.url.params).get("limit") == "5"
+
+
+async def test_list_markets_page_size_sets_page_boundary(aclient, respx_mock):
+    respx_mock.get(f"{BASE_URL}/v1/markets").mock(
+        return_value=httpx.Response(
+            200,
+            json={"markets": [{"id": "m1", "condition_id": "0xc1"},
+                              {"id": "m2", "condition_id": "0xc2"}]},
+        )
+    )
+    page = await aclient.list_markets(page_size=2).first_page()
+    assert len(page.items) == 2
+    assert page.has_more is True
+    assert page.next_cursor is not None
