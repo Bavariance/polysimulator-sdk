@@ -139,6 +139,25 @@ async def test_get_order_book_colon_form_routes_to_condition(aclient, respx_mock
     assert book.token_id == "c1:NO"
 
 
+async def test_get_order_book_colon_up_routes_to_condition(aclient, respx_mock):
+    # UpDown markets carry Up/Down outcomes; the colon form must route a :UP
+    # token to the per-condition book endpoint with outcome=UP (mirroring the
+    # :NO/:YES routing), NOT fall through to the bare-token /v1/book endpoint.
+    route = respx_mock.get(f"{BASE_URL}/v1/markets/c1/book").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "market": "c1",
+                "bids": [{"price": "0.40", "size": "100"}],
+                "asks": [{"price": "0.60", "size": "50"}],
+            },
+        )
+    )
+    book = await aclient.get_order_book(token_id="c1:UP")
+    assert dict(route.calls.last.request.url.params)["outcome"] == "UP"
+    assert book.token_id == "c1:UP"
+
+
 async def test_get_order_book_normalises_level_ordering(aclient, respx_mock):
     respx_mock.get(f"{BASE_URL}/v1/book").mock(
         return_value=httpx.Response(

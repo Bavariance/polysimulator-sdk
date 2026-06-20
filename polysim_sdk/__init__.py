@@ -36,6 +36,7 @@ from polysim_sdk.exceptions import (
     RateLimitError,
     ValidationError,
 )
+from polysim_sdk.retry import retry_on_market_warmup
 
 __all__ = [
     "PolySimClient",
@@ -47,6 +48,7 @@ __all__ = [
     "PolySimError",
     "RateLimitError",
     "ValidationError",
+    "retry_on_market_warmup",
 ]
 
 __version__ = "0.2.2"

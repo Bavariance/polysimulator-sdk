@@ -113,15 +113,16 @@ class PublicClient:
 
         A **bare** token id routes to the token-native ``GET /v1/book?token_id=``
         endpoint — the parity path, since py-sdk always passes a real
-        outcome-token id. The ``condition_id:YES`` / ``:NO`` **colon form** is
-        our convenience extension: it keeps condition-id routing and threads the
-        outcome through as a query param so ``:NO`` reads the NO book.
+        outcome-token id. The ``condition_id:YES`` / ``:NO`` **colon form** (plus
+        ``:UP`` / ``:DOWN`` for UpDown markets) is our convenience extension: it
+        keeps condition-id routing and threads the outcome through as a query
+        param so ``:NO`` reads the NO book and ``:UP`` reads the UP book.
         """
         tid = str(token_id)
         if ":" in tid:
             market_id, _, outcome = tid.rpartition(":")
             outcome = outcome.upper()
-            if outcome in ("YES", "NO") and market_id:
+            if outcome in ("YES", "NO", "UP", "DOWN") and market_id:
                 return self._client.get_book(market_id, outcome=outcome)
         return self._client.get_book_by_token(tid)
 

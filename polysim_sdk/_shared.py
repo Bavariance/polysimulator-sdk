@@ -103,15 +103,22 @@ def _split_token(token_id: str) -> tuple[str, str]:
     """Map a py-clob ``token_id`` onto PolySim ``(market_id, outcome)``.
 
     py-clob-client addresses a single outcome token; PolySim addresses a
-    market plus an outcome (YES/NO). The parity seam: a bare ``token_id``
-    is treated as the market id with outcome ``YES``; append ``":NO"`` /
-    ``":YES"`` to target the other outcome explicitly.
+    market plus an outcome. The parity seam: a bare ``token_id`` is treated
+    as the market id with outcome ``YES``; append ``":NO"`` / ``":YES"`` to
+    target the other outcome explicitly. UpDown markets carry ``Up`` / ``Down``
+    outcomes, so the same colon form also accepts ``":UP"`` / ``":DOWN"``
+    (case-insensitive, returned uppercase). The backend matches the outcome
+    case-insensitively, so ``"UP"`` / ``"DOWN"`` are accepted as written.
+
+    The colon form is the drop-in's own convenience extension (it is **not**
+    py-clob-client parity, where a real outcome-token id is always passed), so
+    accepting the extra UpDown outcomes leaves the v1 parity contract intact.
     """
     tid = str(token_id)
     if ":" in tid:
         market_id, _, outcome = tid.rpartition(":")
         outcome = outcome.upper()
-        if outcome in ("YES", "NO") and market_id:
+        if outcome in ("YES", "NO", "UP", "DOWN") and market_id:
             return market_id, outcome
     return tid, "YES"
 

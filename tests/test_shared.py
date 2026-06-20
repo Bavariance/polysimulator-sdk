@@ -83,3 +83,26 @@ def test_split_token_parity_seam():
     # The colon form targets the explicit outcome.
     assert _split_token("c1:NO") == ("c1", "NO")
     assert _split_token("c1:yes") == ("c1", "YES")
+
+
+def test_split_token_resolves_updown_outcomes():
+    # UpDown markets carry "Up"/"Down" outcomes, so the colon form must resolve
+    # ``condition_id:UP`` / ``:DOWN`` just like ``:YES`` / ``:NO`` (the colon
+    # form is the drop-in's own convenience extension, not py-clob parity).
+    assert _split_token("0xabc:UP") == ("0xabc", "UP")
+    assert _split_token("0xabc:DOWN") == ("0xabc", "DOWN")
+    # Case-insensitive, returned uppercase (consistent with YES/NO behaviour).
+    assert _split_token("0xabc:up") == ("0xabc", "UP")
+    assert _split_token("0xabc:down") == ("0xabc", "DOWN")
+
+
+def test_split_token_updown_regression_pre_fix_swallowed_outcome():
+    # Regression guard for the UpDown 404 bug: before the whitelist was widened
+    # to include UP/DOWN, ``_split_token("0xCID:UP")`` fell through and returned
+    # the WHOLE ``cid:UP`` string as the market id (outcome "YES"), which made
+    # the backend 404 "Market not found: 0xCID:UP". The market id must never
+    # carry the colon suffix for a recognised UpDown outcome.
+    market_id, outcome = _split_token("0xCID:UP")
+    assert market_id == "0xCID"
+    assert ":" not in market_id
+    assert outcome == "UP"

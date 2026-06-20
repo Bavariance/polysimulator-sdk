@@ -201,6 +201,39 @@ network, tolerant of missing fields): `seconds_to_expiry`, `is_window_open`,
 `INTERVALS` vocab tuples. For a **streaming** tap on the underlying, see
 [SSE: live underlying spot](#sse-live-underlying-spot) below.
 
+### New-market warm-up: retry order placement on a 404
+
+A **brand-new** market — especially the 5m Up/Down windows that roll every few
+minutes — has a short window after creation before it enters the
+order-validation catalog. An order placed in that window transiently fails with
+a `404` (`code="MARKET_NOT_FOUND"`). The window is short — on the order of ~30s,
+the Up/Down roll cadence — but it is a cadence, **not** a guarantee.
+
+The SDK does **not** auto-retry 404s (by design — a 404 is normally permanent),
+so a bot trading freshly-rolled markets should catch and retry that one signal
+with backoff. The native client ships a small opt-in helper that retries **only**
+the warm-up 404 and re-raises everything else (and the 404 itself once the budget
+is spent):
+
+```python
+from polysim_sdk import PolySimClient, retry_on_market_warmup
+
+with PolySimClient() as client:
+    fill = retry_on_market_warmup(
+        lambda: client.place_order(
+            market_id=cid, side="BUY", outcome="Up", amount="10", price="0.99",
+        ),
+        attempts=6, base_delay=2.0,   # ~2,4,8,16,30s capped backoff between tries
+    )
+```
+
+It wraps any zero-argument callable, so the same helper works with a
+`polysim_clob_client` drop-in call (e.g.
+`retry_on_market_warmup(lambda: clob.create_and_post_order(args))`); the drop-in
+surfaces the same condition as a `PolyApiException` with `status_code == 404`.
+See [Errors](#errors) for the standalone retry-on-404 pattern if you'd rather
+roll your own.
+
 ---
 
 ## Polymarket compatibility
@@ -767,11 +800,14 @@ Every method maps by one of three strategies:
 `py-clob-client` addresses a single outcome token by `token_id`; PolySimulator
 addresses a **market plus an outcome**. The seam: a bare `token_id` is treated as
 the market id with outcome `YES`. Append `":NO"` or `":YES"` to target the other
-side explicitly.
+side explicitly. **Up/Down markets** carry `Up`/`Down` outcomes, so the same
+colon form also accepts `":UP"` / `":DOWN"` (case-insensitive); the backend
+matches the order outcome case-insensitively, so either case is accepted.
 
 ```python
 client.create_order(OrderArgs(token_id="0xMARKET",     ...))  # → market 0xMARKET, YES
 client.create_order(OrderArgs(token_id="0xMARKET:NO",  ...))  # → market 0xMARKET, NO
+client.create_order(OrderArgs(token_id="0xUPDOWN:UP",  ...))  # → Up/Down market, UP
 ```
 
 **Reads are true-token-parity; writes use the market+outcome model.** This is an
@@ -794,8 +830,9 @@ intentional asymmetry:
   order loudly — it never silently places a different one.
 
 If you only ever pass real outcome-token ids (the `py-clob-client` norm), reads
-"just work" with full parity. The `:YES`/`:NO` suffix exists for callers who
-prefer to address PolySimulator markets by condition id directly.
+"just work" with full parity. The `:YES`/`:NO` suffix (and `:UP`/`:DOWN` for
+Up/Down markets) exists for callers who prefer to address PolySimulator markets
+by condition id directly.
 
 ### Orders are never signed
 
@@ -911,6 +948,66 @@ except PolySimError as exc:
 The client paces itself (a 50 ms floor between requests) and backs off on
 `429`/`425`/`5xx` using `Retry-After`. Opt out with `floor_interval=0.0` and
 `max_retries=0` to handle pacing yourself.
+
+### New-market warm-up `404` (retry-on-404)
+
+The SDK auto-retries `429`/`5xx` but **never** a `404` — a 404 is normally
+permanent. The one benign exception is a **freshly-created market** (most often
+a 5m Up/Down window): for a short window after creation — on the order of ~30s,
+the Up/Down roll cadence, though not a guarantee — it is not yet in the
+order-validation catalog and order placement transiently fails with
+`ApiError(status_code=404, code="MARKET_NOT_FOUND")`. Retry **only** that signal,
+with backoff; re-raise any other error (including a 404 with a different `code`,
+which is a real "not found").
+
+Use the shipped helper (recommended) …
+
+```python
+from polysim_sdk import PolySimClient, retry_on_market_warmup
+
+with PolySimClient() as client:
+    fill = retry_on_market_warmup(
+        lambda: client.place_order(
+            market_id=cid, side="BUY", outcome="Up", amount="10", price="0.99",
+        ),
+        attempts=6, base_delay=2.0,
+    )
+```
+
+… or roll your own on the native `ApiError`:
+
+```python
+import time
+from polysim_sdk import ApiError
+
+for i in range(6):
+    try:
+        fill = client.place_order(market_id=cid, side="BUY", outcome="Up",
+                                  amount="10", price="0.99")
+        break
+    except ApiError as exc:
+        if exc.status_code == 404 and exc.code == "MARKET_NOT_FOUND" and i < 5:
+            time.sleep(min(2.0 * 2**i, 30.0))   # capped backoff, then retry
+            continue
+        raise   # any other error — and the final 404 — propagates
+```
+
+With the **`polysim_clob_client` drop-in**, the same condition surfaces as a
+`PolyApiException` with `status_code == 404`; catch it and retry the same way (or
+pass your drop-in call to `retry_on_market_warmup(lambda: clob.create_and_post_order(...))`,
+which works with any callable):
+
+```python
+from polysim_clob_client.exceptions import PolyApiException
+
+try:
+    resp = clob.create_and_post_order(order_args)
+except PolyApiException as exc:
+    if exc.status_code == 404 and getattr(exc, "code", None) == "MARKET_NOT_FOUND":
+        ...  # warm-up — retry with backoff
+    else:
+        raise   # any other error — including a 404 with a different code — propagates
+```
 
 ### Troubleshooting: `error code: 1010` / blocked User-Agent
 

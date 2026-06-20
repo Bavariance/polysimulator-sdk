@@ -159,6 +159,16 @@ def raise_for_status(resp: httpx.Response) -> None:
     code = payload.get("code") or payload.get("error")
     if isinstance(code, dict):
         code = code.get("code") or code.get("error")
+    # The authoritative, docs-promised machine code rides in the
+    # ``X-Polysim-Code`` response header (always exposed). The body's ``error``
+    # field is the PM single-field shape — a human sentence, not a stable code
+    # — so the header wins when present. We only fall back to the body-derived
+    # value (the back-compat ``{error: <CODE>, message: <text>}`` inline shape)
+    # when the header is absent. Header lookup is case-insensitive (httpx
+    # ``Headers``); strip stray whitespace and ignore an empty value.
+    header_code = (resp.headers.get("X-Polysim-Code") or "").strip()
+    if header_code:
+        code = header_code
     request_id = resp.headers.get("x-request-id")
 
     if resp.status_code in (400, 422):

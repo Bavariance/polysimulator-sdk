@@ -149,7 +149,9 @@ class ClobClient:
 
         Thin wrapper over :func:`polysim_sdk._shared._split_token` (the shared
         parity seam): a bare ``token_id`` is the market id with outcome
-        ``YES``; ``":NO"`` / ``":YES"`` targets the other outcome explicitly.
+        ``YES``; ``":NO"`` / ``":YES"`` targets the other outcome explicitly,
+        and ``":UP"`` / ``":DOWN"`` targets an UpDown market's outcomes (the
+        backend matches the outcome case-insensitively).
         """
         return _split_token_shared(token_id)
 
@@ -161,9 +163,10 @@ class ClobClient:
         condition ids. For those it reverse-resolves via
         ``GET /v1/markets-by-token/{token_id}`` (result cached per token), so an
         order placed with a genuine Polymarket token id lands on the right
-        market + outcome. The ``condition_id:YES``/``:NO`` colon form and short
-        / non-numeric ids resolve **locally with no network call** via
-        :meth:`_split_token` (preserving the parity seam).
+        market + outcome. The ``condition_id:YES``/``:NO`` colon form (plus
+        ``:UP``/``:DOWN`` for UpDown markets) and short / non-numeric ids
+        resolve **locally with no network call** via :meth:`_split_token`
+        (preserving the parity seam).
         """
         tid = str(token_id)
         # Colon form is our own convenience extension — always resolve locally.
@@ -191,15 +194,16 @@ class ClobClient:
         ``GET /v1/book?token_id=...`` endpoint — this is what gives genuine
         parity with Polymarket's CLOB book reads, where py-clob-client always
         passes a real outcome-token id. The ``condition_id:YES`` / ``:NO``
-        **colon form** is our own convenience extension; it keeps condition-id
-        routing and threads the outcome through as a query param so ``:NO``
-        actually reads the NO book.
+        **colon form** (plus ``:UP`` / ``:DOWN`` for UpDown markets) is our own
+        convenience extension; it keeps condition-id routing and threads the
+        outcome through as a query param so e.g. ``:NO`` reads the NO book and
+        ``:UP`` reads the UP book.
         """
         tid = str(token_id)
         if ":" in tid:
             market_id, _, outcome = tid.rpartition(":")
             outcome = outcome.upper()
-            if outcome in ("YES", "NO") and market_id:
+            if outcome in ("YES", "NO", "UP", "DOWN") and market_id:
                 return self._client.get_book(market_id, outcome=outcome)
         return self._client.get_book_by_token(tid)
 
