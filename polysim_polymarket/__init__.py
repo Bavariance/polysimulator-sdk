@@ -23,7 +23,7 @@ This ships the full mirrored surface: sync + async ``PublicClient`` /
 ``SecureClient`` covering CLOB market-data reads, account/auth, and the trading
 write surface, plus on-chain paper no-ops, rewards/builder/RFQ stubs, and the
 core realtime streams (``market`` / ``user`` / ``crypto_prices``) — a paper-mode
-mirror of ``polymarket-client`` ``0.1.0b8``, returning typed pydantic models.
+mirror of ``polymarket-client`` ``0.1.0b13``, returning typed pydantic models.
 """
 
 from __future__ import annotations
@@ -111,6 +111,7 @@ from polysim_polymarket.rfq import (
     RfqRequestorPublicId,
     RfqSession,
     RfqSide,
+    RfqTradeEvent,
 )
 from polysim_sdk import __version__
 
@@ -221,6 +222,7 @@ __all__ = [
     "RfqRequestorPublicId",
     "RfqSession",
     "RfqSide",
+    "RfqTradeEvent",
     "SecureClient",
     "SignedOrder",
     "SyncTransactionHandle",

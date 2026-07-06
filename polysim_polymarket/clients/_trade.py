@@ -58,10 +58,11 @@ DEFAULT_SELL_WORST_PRICE = Decimal("0.01")
 _VALID_MARKET_ORDER_TYPES = frozenset({"FAK", "FOK"})
 
 # py-sdk requires a GTD ``expiration`` to be an ABSOLUTE Unix timestamp at least
-# this many seconds in the future (``limit._MIN_EXPIRATION_BUFFER_S``); a sub-60s
-# or past timestamp is rejected before any request. We mirror the constant + rule
-# + message so a ported bot's bad-expiration call raises identically.
-_MIN_EXPIRATION_BUFFER_S = 60
+# this many seconds in the future (``limit._MIN_EXPIRATION_BUFFER_S``); a sub-180s
+# or past timestamp is rejected before any request. py-sdk b13 raised this floor
+# from 60s to 180s (3-minute minimum GTD). We mirror the constant + rule + message
+# so a ported bot's bad-expiration call raises identically.
+_MIN_EXPIRATION_BUFFER_S = 180
 
 # A long all-digit token id is a real Polymarket CLOB outcome-token id (not a
 # PolySim condition id); it needs reverse-resolution via the network. Matches the
@@ -249,8 +250,8 @@ def build_limit_order(
             raise UserInputError("expiration must be a non-negative integer.")
         if expiration < 0:
             raise UserInputError("expiration must be a non-negative integer.")
-        # py-sdk: an ABSOLUTE Unix ts must be ≥ now + 60s. Layered AFTER the
-        # non-negative check, exactly as py-sdk orders the two guards.
+        # py-sdk: an ABSOLUTE Unix ts must be ≥ now + 180s (b13's 3-min floor).
+        # Layered AFTER the non-negative check, exactly as py-sdk orders the two guards.
         minimum = int(time.time()) + _MIN_EXPIRATION_BUFFER_S
         if expiration < minimum:
             raise UserInputError(

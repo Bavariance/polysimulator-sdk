@@ -14,7 +14,7 @@ from importlib.metadata import PackageNotFoundError, version
 # Fallback for a checkout with no installed distribution metadata (e.g. running
 # straight from source without ``pip install -e``). Kept in sync with
 # ``[project].version`` as a last resort only — the metadata read is canonical.
-_FALLBACK_VERSION = "0.4.2"
+_FALLBACK_VERSION = "0.4.3"
 
 try:
     __version__ = version("polysimulator")

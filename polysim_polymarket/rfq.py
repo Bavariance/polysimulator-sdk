@@ -100,6 +100,8 @@ class RfqErrorCode(StrEnum):
     INVALID_RFQ = "INVALID_RFQ"
     INVALID_RFQ_STATE = "INVALID_RFQ_STATE"
     INVALID_ROLE = "INVALID_ROLE"
+    INVALID_SIGNATURE = "INVALID_SIGNATURE"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
     LEG_METADATA_UNAVAILABLE = "LEG_METADATA_UNAVAILABLE"
     MAKER_ALREADY_RESPONDED = "MAKER_ALREADY_RESPONDED"
     MAKER_NOT_REQUIRED = "MAKER_NOT_REQUIRED"
@@ -146,6 +148,29 @@ class RfqExecutionUpdateEvent:
     rfq_id: RfqId
     status: RfqExecutionStatus
     tx_hash: str | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RfqTradeEvent:
+    """A confirmed-trade broadcast. Mirrors ``polymarket.rfq.RfqTradeEvent`` (py-sdk b9+).
+
+    A pure data event (no live-session methods) — pushed when an RFQ leg trade is
+    confirmed. The TYPE is importable so a bot's ``RfqEvent`` handler type-checks
+    and ``isinstance`` resolves across the prefix swap. (py-sdk's ``condition_id`` /
+    ``leg_position_ids`` carry the ``ComboConditionId`` / ``PositionId`` aliases,
+    which are plain ``str`` — the mirror uses bare ``str`` like its sibling events.)
+    """
+
+    type: Literal["trade"]
+    rfq_id: RfqId
+    requester_id: RfqRequestorPublicId
+    condition_id: str
+    leg_position_ids: tuple[str, ...]
+    direction: RfqDirection
+    side: RfqSide
+    price: Decimal
+    size: Decimal
+    executed_at: int
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -215,7 +240,9 @@ class RfqConfirmationRequestEvent:
         raise NotImplementedError(RFQ_NOT_SIMULATED)
 
 
-RfqEvent = RfqQuoteRequestEvent | RfqConfirmationRequestEvent | RfqExecutionUpdateEvent
+RfqEvent = (
+    RfqQuoteRequestEvent | RfqConfirmationRequestEvent | RfqExecutionUpdateEvent | RfqTradeEvent
+)
 
 
 class RfqQuoteRejectedError(PolyException):
@@ -225,10 +252,18 @@ class RfqQuoteRejectedError(PolyException):
     error-tree divergence from py-sdk's ``PolymarketError``).
     """
 
-    def __init__(self, message: str, *, rfq_id: RfqId, code: RfqErrorCode | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        rfq_id: RfqId,
+        code: RfqErrorCode | None = None,
+        error_id: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.rfq_id = rfq_id
         self.code = code
+        self.error_id = error_id
 
 
 class RfqCancelQuoteRejectedError(PolyException):
@@ -241,11 +276,13 @@ class RfqCancelQuoteRejectedError(PolyException):
         rfq_id: RfqId,
         quote_id: RfqQuoteId,
         code: RfqErrorCode | None = None,
+        error_id: str | None = None,
     ) -> None:
         super().__init__(message)
         self.rfq_id = rfq_id
         self.quote_id = quote_id
         self.code = code
+        self.error_id = error_id
 
 
 class RfqConfirmationRejectedError(PolyException):
@@ -258,11 +295,13 @@ class RfqConfirmationRejectedError(PolyException):
         rfq_id: RfqId,
         quote_id: RfqQuoteId,
         code: RfqErrorCode | None = None,
+        error_id: str | None = None,
     ) -> None:
         super().__init__(message)
         self.rfq_id = rfq_id
         self.quote_id = quote_id
         self.code = code
+        self.error_id = error_id
 
 
 @runtime_checkable
@@ -325,4 +364,5 @@ __all__ = [
     "RfqRequestorPublicId",
     "RfqSession",
     "RfqSide",
+    "RfqTradeEvent",
 ]

@@ -332,7 +332,7 @@ OrderPostStatus: TypeAlias = Literal["live", "matched", "delayed"]
 # price increments a CLOB market can use. py-sdk defines it exactly as below; a
 # ported bot that type-hints a tick size against this alias keeps the same type
 # across the prefix swap.
-TickSize: TypeAlias = Literal["0.1", "0.01", "0.001", "0.0001"]
+TickSize: TypeAlias = Literal["0.1", "0.01", "0.005", "0.0025", "0.001", "0.0001"]
 
 # Mirrors ``polymarket.models.clob.order_response.OrderResponseErrorCode`` — the
 # closed set of reasons a posted order is rejected.

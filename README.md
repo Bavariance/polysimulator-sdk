@@ -4,9 +4,9 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/polysimulator.svg)](https://pypi.org/project/polysimulator/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![py-clob-client compat](https://img.shields.io/badge/py--clob--client-v1%20drop--in-blue.svg)](https://github.com/Polymarket/py-clob-client)
-[![py-sdk mirror](https://img.shields.io/badge/polymarket--client-0.1.0b8%20mirror-blueviolet.svg)](https://pypi.org/project/polymarket-client/)
+[![py-sdk mirror](https://img.shields.io/badge/polymarket--client-0.1.0b13%20mirror-blueviolet.svg)](https://pypi.org/project/polymarket-client/)
 
-> **Mirrors Polymarket's unified py-sdk** — `polysim_polymarket` is a paper-mode mirror of [`polymarket-client`](https://pypi.org/project/polymarket-client/) **`0.1.0b8`**: sync + async PublicClient/SecureClient, trading, and core streams. Swap the import prefix + host + auth and your py-sdk bot runs on paper. [Compat matrix ↓](#compat-matrix)
+> **Mirrors Polymarket's unified py-sdk** — `polysim_polymarket` is a paper-mode mirror of [`polymarket-client`](https://pypi.org/project/polymarket-client/) **`0.1.0b13`**: sync + async PublicClient/SecureClient, trading, and core streams. Swap the import prefix + host + auth and your py-sdk bot runs on paper. [Compat matrix ↓](#compat-matrix)
 
 The official Python client for the [PolySimulator](https://polysimulator.com)
 paper-trading API. **One package, three import surfaces:**
@@ -260,7 +260,7 @@ paper-mode-native and not tied to any `py-clob-client` generation.
 |---|---|
 | `py-clob-client` v1 (`< 2.0`; latest `0.34.6`) | ✅ Drop-in via `polysim_clob_client` |
 | `py-clob-client-v2` (`1.0.x`) | ❌ Not supported — use `polysim_sdk`, or pin `py-clob-client<2` |
-| unified **py-sdk** (`polymarket-client`, import `polymarket`; `0.1.0b8`) | 🔶 **Paper-mode mirror** via `polysim_polymarket` — sync + async `PublicClient` / `SecureClient` (reads, account/auth, trading) + core streams; on-chain are paper no-ops and Gamma/Data reads are deferred. See [below](#polymarket-py-sdk-v2-mirror) and the [compat matrix](#compat-matrix) |
+| unified **py-sdk** (`polymarket-client`, import `polymarket`; `0.1.0b13`) | 🔶 **Paper-mode mirror** via `polysim_polymarket` — sync + async `PublicClient` / `SecureClient` (reads, account/auth, trading) + core streams; on-chain are paper no-ops and Gamma/Data reads are deferred. See [below](#polymarket-py-sdk-v2-mirror) and the [compat matrix](#compat-matrix) |
 
 The v2-only concepts — EIP-712 v2 signing, pUSD collateral, protocol-side fees,
 builder codes — have no analog in paper trading, so there is nothing to port:
@@ -445,7 +445,7 @@ mirrored surface and respected the seams above.
 
 ### Compat matrix
 
-> Pinned to **`polymarket-client==0.1.0b8`** — parity is re-locked against this exact pin by the full-surface parity gate; when the pin bumps, this matrix + the badge bump with it.
+> Pinned to **`polymarket-client==0.1.0b13`** — parity is re-locked against this exact pin by the full-surface parity gate; when the pin bumps, this matrix + the badge bump with it.
 
 Support level for every py-sdk surface area, cross-checked against what's
 actually implemented in `polysim_polymarket`:

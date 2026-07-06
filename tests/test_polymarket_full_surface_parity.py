@@ -29,7 +29,7 @@ Two axes, for EVERY client we ship (``PublicClient`` / ``AsyncPublicClient`` /
    enumerated method-by-method here. Any drift — a new py-sdk method, or a
    regressed mirror method — fails here.
 
-Pinned against ``polymarket-client==0.1.0b8`` (the divergence-tracker pin).
+Pinned against ``polymarket-client==0.1.0b13`` (the divergence-tracker pin).
 """
 
 from __future__ import annotations

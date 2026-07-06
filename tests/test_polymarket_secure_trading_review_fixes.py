@@ -67,7 +67,7 @@ def test_pysdk_expiration_message_is_what_we_pin():
             token_id="711", price="0.5", size="10", side="BUY", expiration=1
         )
     )
-    assert text == "expiration must be at least 60 seconds in the future."
+    assert text == "expiration must be at least 180 seconds in the future."
 
 
 def test_limit_order_subminute_future_expiration_raises(secure, respx_mock):
@@ -75,7 +75,7 @@ def test_limit_order_subminute_future_expiration_raises(secure, respx_mock):
 
     soon = int(time.time()) + 30  # 30s out — under the 60s buffer
     with pytest.raises(
-        UserInputError, match=r"^expiration must be at least 60 seconds in the future\.$"
+        UserInputError, match=r"^expiration must be at least 180 seconds in the future\.$"
     ):
         secure.create_limit_order(
             token_id=COLON_TOKEN, price="0.5", size="10", side="BUY", expiration=soon
@@ -87,7 +87,7 @@ def test_limit_order_past_timestamp_expiration_raises(secure, respx_mock):
 
     past = int(time.time()) - 10  # already in the past, but non-negative
     with pytest.raises(
-        UserInputError, match=r"^expiration must be at least 60 seconds in the future\.$"
+        UserInputError, match=r"^expiration must be at least 180 seconds in the future\.$"
     ):
         secure.create_limit_order(
             token_id=COLON_TOKEN, price="0.5", size="10", side="BUY", expiration=past
@@ -122,7 +122,7 @@ def test_expiration_buffer_matches_pysdk_constant():
     """The 60s buffer is py-sdk's, not a hard-coded guess."""
     from polymarket._internal.actions.orders.limit import _MIN_EXPIRATION_BUFFER_S
 
-    assert _MIN_EXPIRATION_BUFFER_S == 60
+    assert _MIN_EXPIRATION_BUFFER_S == 180
 
 
 # ── Finding 2: max_spend spend-ceiling clamp on market BUY ───────────────────
