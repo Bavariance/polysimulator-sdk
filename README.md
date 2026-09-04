@@ -25,6 +25,32 @@ the `X-API-Key` header.
 
 ---
 
+## 60 seconds
+
+```bash
+pip install polysimulator
+export POLYSIM_API_KEY=ps_live_...     # polysimulator.com/settings/api
+```
+
+```python
+from polysim_sdk import PolySimClient
+
+with PolySimClient() as client:
+    market = client.list_markets(limit=1, hot_only=True)[0]
+    fill = client.place_order(
+        market_id=market["condition_id"], side="BUY", outcome="YES",
+        quantity=10, order_type="market", price="0.99",
+    )
+    print(fill["status"], fill.get("price"))
+```
+
+That order filled against the real Polymarket level-2 book, at the price the
+ladder actually supported. Runnable versions of this and four more, including
+resting limits and porting a `py-clob-client` bot, are in
+**[`examples/`](examples/)**.
+
+---
+
 ## Install
 
 Targets Python 3.10+.
