@@ -60,11 +60,24 @@ only after deciding whether our engine can price a combo at all.
 (`PrepareLimitOrderParams`, `PrepareMarketOrderParams`, `OrderDraft`).
 
 This is one field across the objects every bot touches on every order. A bot
-written against 0.9.0 and pointed at our mirror gets objects missing a field it
-reads. That is a silent `AttributeError` in user code, on the happy path.
+written against 0.9.0 and pointed at a mirror missing it gets objects lacking a
+field it reads — a silent `AttributeError` in user code, on the happy path.
 
-**Do this first.** It is small, mechanical, and it is the difference between the
-mirror being drop-in and being subtly wrong.
+**ALREADY DONE — do not spend the morning on it.** I flagged this as the first
+task, then checked our mirror instead of assuming, and all six classes carry it:
+
+```python
+# polysim_polymarket/models.py — ClobTrade
+token_id: str = Field(default="", validation_alias=AliasChoices("token_id", "asset_id"))
+```
+
+The alias accepts both `token_id` and the older `asset_id`, so the mirror is
+ahead of its own pin here. Verified on `ClobTrade`, `MakerOrder`, `OpenOrder`,
+`BuilderTrade`, `LastTradePriceForToken` and `MarketBestBidAskPayload`.
+
+Recording it as done rather than deleting the section: the next person to read
+the upstream diff will reach the same conclusion I did and should be told it was
+already checked.
 
 ## Two removed public symbols
 
@@ -81,8 +94,8 @@ and most of the gap is surface we should deliberately decline (perps).
 
 Suggested order, highest value first:
 
-1. `token_id` across the shared models — hours, and removes a silent breakage class
-2. Drop the two removed symbols — minutes
+1. ~~`token_id` across the shared models~~ — **already present**, verified
+2. Drop the two removed symbols (`WalletDerivation`, `Notification`) — minutes
 3. Re-pin to a chosen release and state the pin in the README badge — minutes
 4. Notifications cluster — mechanical
 5. Combo + builder/session keys — real design decisions, do them awake
