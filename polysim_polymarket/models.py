@@ -251,10 +251,28 @@ class BalanceAllowance(_BaseModel):
 
 
 class Notification(_BaseModel):
-    """Account notification. Mirrors ``polymarket.models.clob.account.Notification``.
+    """Account notification. Mirrored ``polymarket.models.clob.account.Notification``.
 
     The paper CLOB serves no notifications, but the model exists so a ported
     bot's ``for n in client.get_notifications(): n.type`` type-checks unchanged.
+
+    .. deprecated::
+       Upstream **removed** this class. As of ``polymarket-client`` 0.9.0 it no
+       longer exists at ``polymarket.models.clob.account.Notification``; it was
+       replaced by a typed cluster in ``polymarket.models.clob.notifications``
+       (``NotificationType``, ``MarketResolvedNotification``,
+       ``MarketRegisteredNotification``, ``AutoRedeemedNotification``,
+       ``ComboAutoRedeemedNotification``, ``ChildCommentCreatedNotification``
+       and their payload types).
+
+       It is kept here deliberately rather than deleted: upstream removing a
+       symbol does not break code written against OUR mirror, but us removing it
+       would. When the notifications cluster is mirrored, this becomes an alias
+       or a shim, not a deletion.
+
+       Verified 2026-09-06 by diffing the parsed public API of the 0.1.0b13 and
+       0.9.0 wheels: 208 -> 346 public classes, 140 added, 2 removed, and this
+       is one of the two removed.
     """
 
     id: int
