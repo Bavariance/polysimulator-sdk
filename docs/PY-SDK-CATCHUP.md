@@ -102,7 +102,32 @@ Suggested order, highest value first:
    would break code written against OUR mirror, which upstream's removal does
    not. When the cluster is mirrored it becomes an alias or a shim.
 3. Re-pin to a chosen release and state the pin in the README badge — minutes
-4. Notifications cluster — mechanical
+4. Notifications cluster — **NOT mechanical, and this is the real first decision.**
+   I called it mechanical before reading it. Upstream's `notifications.py` is 460
+   lines and its models are typed with an alias layer our mirror does not have at
+   all:
+
+   | upstream type | present in our mirror |
+   |---|---|
+   | `ClobAssetId` | **no** |
+   | `ConditionId` | **no** |
+   | `OrderId` | **no** |
+   | `QuestionId` | **no** |
+   | `TransactionHash` | yes (3 files) |
+   | `OrderSide` | yes (8 files) |
+   | `OrderType` | yes (2 files) |
+
+   We use plain `str` where upstream now uses these aliases. So mirroring
+   notifications forces a choice:
+
+   * **(a)** introduce the whole typed-alias layer — cross-cutting, touches every
+     model, changes the public type surface for existing users; or
+   * **(b)** mirror with plain `str` — cheap, but the mirror's types then differ  from
+     upstream's and a bot doing `isinstance` or strict typing sees a difference.
+
+   That is a design decision about how faithful the mirror is meant to be, not a
+   typing exercise. **Operator call.** Everything downstream of it (combo,
+   builder keys, session keys) inherits the same choice, so decide it once.
 5. Combo + builder/session keys — real design decisions, do them awake
 6. Perps — explicitly refuse, in code, with a reason a caller can read
 
