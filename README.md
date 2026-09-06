@@ -7,6 +7,8 @@
 [![py-sdk mirror](https://img.shields.io/badge/polymarket--client-0.1.0b13%20mirror-blueviolet.svg)](https://pypi.org/project/polymarket-client/)
 
 > **Mirrors Polymarket's unified py-sdk** — `polysim_polymarket` is a paper-mode mirror of [`polymarket-client`](https://pypi.org/project/polymarket-client/) **`0.1.0b13`**: sync + async PublicClient/SecureClient, trading, and core streams. Swap the import prefix + host + auth and your py-sdk bot runs on paper. [Compat matrix ↓](#compat-matrix)
+>
+> **The mirror is behind upstream.** `polymarket-client` is at **0.9.0** (released 2026-09-04); this mirrors `0.1.0b13`, twelve releases back. Measured by diffing the parsed public API of both wheels: **208 → 346 public classes, 140 added, 2 removed, 30 with changed methods.** The largest addition is **perpetuals**, which we deliberately do not mirror — we have no perps data and no way to score a perps fill honestly, so a mirrored method would return plausible nonsense. Check a method against the version you target before relying on it; the catch-up plan is in [`docs/PY-SDK-CATCHUP.md`](docs/PY-SDK-CATCHUP.md).
 
 The official Python client for the [PolySimulator](https://polysimulator.com)
 paper-trading API. **One package, three import surfaces:**
