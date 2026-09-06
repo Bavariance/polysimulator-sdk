@@ -95,7 +95,12 @@ and most of the gap is surface we should deliberately decline (perps).
 Suggested order, highest value first:
 
 1. ~~`token_id` across the shared models~~ — **already present**, verified
-2. Drop the two removed symbols (`WalletDerivation`, `Notification`) — minutes
+2. ~~Drop the two removed symbols~~ — **done, and NOT by dropping them.**
+   `WalletDerivation` was never mirrored here (nothing to do). `Notification`
+   is mirrored and is now documented as upstream-removed, with a pointer to the
+   `polymarket.models.clob.notifications` cluster that replaced it. Deleting it
+   would break code written against OUR mirror, which upstream's removal does
+   not. When the cluster is mirrored it becomes an alias or a shim.
 3. Re-pin to a chosen release and state the pin in the README badge — minutes
 4. Notifications cluster — mechanical
 5. Combo + builder/session keys — real design decisions, do them awake
